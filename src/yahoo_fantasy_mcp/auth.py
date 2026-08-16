@@ -93,13 +93,23 @@ def ensure_seed_file(token_path: str, client_id: str, client_secret: str) -> Non
 def login(client_id: str, client_secret: str, token_path: str) -> TokenProvider:
     """One-time interactive OAuth consent flow (FR-001).
 
-    Delegates to yahoo_oauth.OAuth2, which opens a browser for consent and
-    persists the resulting token to `token_path` (a gitignored local path
-    — see config.DEFAULT_TOKEN_PATH). ensure_seed_file() above is what
-    makes the *first-ever* call here work rather than crash — see its
-    docstring. This function itself is exercised by quickstart.md V1, not
-    the unit suite: it requires a real browser and a real Yahoo account,
-    which is exactly why ensure_fresh(), classify_auth_failure(), and
+    Delegates to yahoo_oauth.OAuth2. ensure_seed_file() above is what makes
+    the *first-ever* call here work rather than crash — see its docstring.
+
+    browser_callback=False is passed deliberately (verified against
+    yahoo_oauth's source): with it True (the library default), it calls
+    webbrowser.open(authorize_url) and only logs the URL at DEBUG level —
+    in a headless environment (a GitHub Codespace terminal, an SSH
+    session) webbrowser.open() fails silently and the user is left at a
+    bare "Enter verifier:" prompt with no URL ever shown. With it False,
+    yahoo_oauth prints the authorize URL as part of the input() prompt
+    itself, which works identically whether or not a browser is available
+    — strictly more robust, so we always use it, not just for headless
+    cases.
+
+    This function itself is exercised by quickstart.md V1, not the unit
+    suite: it requires a real browser and a real Yahoo account, which is
+    exactly why ensure_fresh(), classify_auth_failure(), and
     ensure_seed_file() are factored out as pure, independently testable
     logic instead of being buried inside this call.
     """
@@ -107,7 +117,7 @@ def login(client_id: str, client_secret: str, token_path: str) -> TokenProvider:
 
     ensure_seed_file(token_path, client_id, client_secret)
     logger.info("starting Yahoo OAuth consent flow (token_path=%s)", mask_secrets(token_path))
-    oauth = OAuth2(None, None, from_file=token_path)
+    oauth = OAuth2(None, None, from_file=token_path, browser_callback=False)
     if not oauth.token_is_valid():
         oauth.refresh_access_token()
     return oauth

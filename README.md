@@ -21,6 +21,10 @@ for the full requirements and rationale.
 
 ## Setup
 
+Two ways to run this. Pick one.
+
+### Option A: locally on your own machine
+
 ```bash
 uv sync
 cp .env.example .env
@@ -38,6 +42,42 @@ Edit `.env`:
 `.env` is gitignored. It is never committed, logged, or printed — see
 `specs/001-yahoo-fantasy-mcp/data-model.md` validation rule 4 and
 `src/yahoo_fantasy_mcp/logging_utils.py`.
+
+### Option B: GitHub Codespaces
+
+`.devcontainer/devcontainer.json` provisions Python 3.11 + `uv` and runs
+`uv sync` automatically when the Codespace builds. No local install needed.
+
+Codespaces secrets become environment variables automatically inside the
+Codespace terminal — the same `config.py` reads either way, no code branch
+for "am I in a Codespace." **The secret names must match exactly** what
+`config.py` looks up (`os.environ.get`) — GitHub secret names do not get a
+`YAHOO_` prefix added automatically:
+
+| Codespaces secret name (GitHub Settings → Secrets and variables → Codespaces) | Value |
+|---|---|
+| `YAHOO_CLIENT_ID` | Your Yahoo app's Client ID |
+| `YAHOO_CLIENT_SECRET` | Your Yahoo app's Client Secret |
+| `YAHOO_LEAGUE_KEY` | Your league key, e.g. `449.l.99001` |
+
+If you already added secrets named `CLIENT_ID`/`CLIENT_SECRET` (without the
+`YAHOO_` prefix) — rename them to the names above; `config.py` won't find
+them otherwise. `APP_ID` isn't used by this server (the OAuth flow only
+needs Client ID + Secret) — harmless to leave it, just inert.
+
+`YAHOO_POLL_INTERVAL_SECONDS` and `YAHOO_ROSTER_SIZE` have safe defaults
+(`5`, `16`) — only add them as secrets if you want to override those.
+
+Once the secrets are named correctly and the Codespace rebuilds, `uv run
+python -m yahoo_fantasy_mcp` should find them exactly like a local `.env`
+would.
+
+**First login in a Codespace looks different than local**: there's no GUI
+browser in the container, so instead of a browser window opening, the
+terminal prints a Yahoo authorization URL directly and waits for you to
+paste back a verifier code — open the printed URL yourself (in your actual
+browser, on your own machine), approve access, and paste the code shown
+back into the Codespace terminal.
 
 ## Run it
 
