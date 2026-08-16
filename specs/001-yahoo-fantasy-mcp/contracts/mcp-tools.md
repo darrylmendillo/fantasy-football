@@ -184,11 +184,17 @@ Undrafted players with ranking context (FR-010).
       "positions": ["RB"],
       "nfl_team": "CAR",
       "percent_owned": 62,
-      "average_pick": 71.4
+      "average_pick": null
     }
   ]
 }
 ```
+
+**Known limitation**: `average_pick` is currently always `null`. `yahoo_fantasy_api`
+has no ADP/draft-analysis endpoint (verified against its source, not assumed) —
+`percent_owned` is real and populated; `average_pick` needs a future
+supplementary data source. This is disclosed, not silently broken — no tool
+description may imply ADP data is available (FR-011).
 
 **Behavioral contract — the critical one**:
 - Availability is **derived** from the same fresh `draft_results()` read that

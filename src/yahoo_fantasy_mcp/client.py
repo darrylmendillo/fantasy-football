@@ -34,7 +34,7 @@ class YahooDataSource(Protocol):
     """
 
     def fetch_league_raw(self) -> dict[str, Any]: ...
-    def fetch_teams_raw(self) -> dict[str, Any]: ...
+    def fetch_teams_raw(self) -> list[dict[str, Any]]: ...
     def fetch_roster_raw(self, team_key: str) -> dict[str, Any]: ...
     def fetch_standings_raw(self) -> list[dict[str, Any]]: ...
     def fetch_draft_results_raw(self) -> list[dict[str, Any]]: ...
@@ -70,16 +70,17 @@ class YahooClient:
         )
 
     def get_teams(self) -> list[Team]:
+        # is_owned_by_current_login comes straight from yahoo_fantasy_api's
+        # League.teams() — verified against upstream source, not guessed.
         raw = self._source.fetch_teams_raw()
-        my_team_key = raw["my_team_key"]
         return [
             Team(
                 team_key=t["team_key"],
                 name=t["name"],
-                is_owned_by_user=(t["team_key"] == my_team_key),
+                is_owned_by_user=bool(t["is_owned_by_current_login"]),
                 standing=t.get("rank"),
             )
-            for t in raw["teams"]
+            for t in raw
         ]
 
     def get_roster(self, team_key: str) -> Roster:
@@ -104,3 +105,141 @@ class YahooClient:
     def get_player_details(self, player_ids: list[int]) -> dict[int, Player]:
         raw = self._source.fetch_player_details_raw(player_ids)
         return {pid: _player_from_raw(p) for pid, p in ((int(k), v) for k, v in raw.items())}
+
+
+def _flatten_name(name: Any) -> str:
+    """yahoo_fantasy_api's own docstrings disagree with each other on shape:
+    Team.roster() shows name as a flat string, but League.player_details()
+    shows {'full': ..., 'first': ..., 'last': ...}. Handle both rather than
+    assume one — this is exactly the kind of upstream inconsistency this
+    module exists to absorb."""
+    if isinstance(name, dict):
+        return str(name.get("full", ""))
+    return str(name)
+
+
+def _flatten_positions(positions: Any) -> list[str]:
+    """Same divergence as _flatten_name: roster() shows ['C','1B'],
+    player_details() shows [{'position': 'RW'}]."""
+    if not positions:
+        return []
+    if isinstance(positions[0], dict):
+        return [p["position"] for p in positions]
+    return list(positions)
+
+
+class YahooFantasyApiDataSource:
+    """Live YahooDataSource backed by yahoo_fantasy_api + an authenticated
+    yahoo_oauth session (see auth.login()).
+
+    Known, disclosed limitation (Principle IV — flagged rather than
+    silently guessed): yahoo_fantasy_api has no ADP/draft-analysis endpoint
+    (verified — its League class exposes draft_results, player_details,
+    percent_owned, free_agents, taken_players, standings, teams, settings;
+    nothing else touches average draft position). `average_pick` is
+    therefore always None from this data source until a supplementary ADP
+    source is added — contracts/mcp-tools.md and data-model.md document
+    this; it is not a bug, but also not implemented, and no tool
+    description may claim otherwise (FR-011).
+
+    Errors: any 401/403 from the underlying `requests` call is classified
+    via auth.classify_auth_failure (FR-007). Exact exception plumbing from
+    yahoo_fantasy_api/yahoo_oauth for non-auth failures is not fully
+    verified against a live account yet — flagged for quickstart V7/V8.
+    """
+
+    def __init__(self, league: Any, my_team_key: str) -> None:
+        # `league` is a yahoo_fantasy_api.League already constructed with an
+        # authenticated session (see auth.login() + yahoo_fantasy_api.Game).
+        self._league = league
+        self._my_team_key = my_team_key
+
+    def _call(self, fn, *args, **kwargs):
+        from yahoo_fantasy_mcp.auth import classify_auth_failure
+
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001 - narrowed below
+            response = getattr(exc, "response", None)
+            status_code = getattr(response, "status_code", None)
+            if status_code is not None:
+                body = getattr(response, "text", "") or ""
+                classify_auth_failure(status_code, body)
+            raise
+
+    def fetch_league_raw(self) -> dict[str, Any]:
+        settings = self._call(self._league.settings)
+        return {
+            "league_key": settings["league_key"],
+            "name": settings["name"],
+            "season": settings["season"],
+            "num_teams": settings["num_teams"],
+            "scoring_type": settings["scoring_type"],
+            # Yahoo's own value is passed through as-is (verified: 'predraft'
+            # is a real value per upstream docstring). Anything else is
+            # treated as "drafting" unless draft_results() is complete —
+            # draft.py's Draft.is_complete is the source of truth for the
+            # postdraft boundary, not this string.
+            "draft_status": settings.get("draft_status", "predraft"),
+        }
+
+    def fetch_teams_raw(self) -> list[dict[str, Any]]:
+        teams = self._call(self._league.teams)
+        return [
+            {
+                "team_key": key,
+                "name": _flatten_name(t["name"]),
+                "is_owned_by_current_login": bool(int(t.get("is_owned_by_current_login", 0))),
+            }
+            for key, t in teams.items()
+        ]
+
+    def fetch_roster_raw(self, team_key: str) -> dict[str, Any]:
+        team = self._league.to_team(team_key)
+        players = self._call(team.roster)
+        return {
+            "team_key": team_key,
+            "players": [
+                {
+                    "player_id": int(p["player_id"]),
+                    "name": _flatten_name(p["name"]),
+                    "eligible_positions": _flatten_positions(p["eligible_positions"]),
+                    "editorial_team_abbr": p.get("editorial_team_abbr", ""),
+                }
+                for p in players
+            ],
+        }
+
+    def fetch_standings_raw(self) -> list[dict[str, Any]]:
+        standings = self._call(self._league.standings)
+        return [
+            {"team_key": t["team_key"], "name": _flatten_name(t["name"]), "rank": int(t["rank"])}
+            for t in standings
+        ]
+
+    def fetch_draft_results_raw(self) -> list[dict[str, Any]]:
+        # Deliberately NOT normalized further here — draft.py needs the raw
+        # 'cost' key (present only for auction picks) intact.
+        return self._call(self._league.draft_results)
+
+    def fetch_player_details_raw(self, player_ids: list[int]) -> dict[str, dict[str, Any]]:
+        if not player_ids:
+            return {}
+        details = self._call(self._league.player_details, player_ids)
+        ownership = {
+            p["player_id"]: p["percent_owned"]
+            for p in self._call(self._league.percent_owned, player_ids)
+        }
+        result: dict[str, dict[str, Any]] = {}
+        for p in details:
+            pid = int(p["player_id"])
+            result[str(pid)] = {
+                "player_id": pid,
+                "name": _flatten_name(p["name"]),
+                "eligible_positions": _flatten_positions(p["eligible_positions"]),
+                "editorial_team_abbr": p.get("editorial_team_abbr", ""),
+                "percent_owned": ownership.get(pid),
+                # See class docstring: not available from this library.
+                "average_pick": None,
+            }
+        return result

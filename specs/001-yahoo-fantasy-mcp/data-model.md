@@ -50,7 +50,7 @@ Availability Invariant below.
 | `positions` | list[str] | Eligible positions, e.g. `["RB", "W/R/T"]`. |
 | `nfl_team` | str | e.g. `KC`. |
 | `percent_owned` | int \| None | Ownership %, when available. Ranking context for FR-010. |
-| `average_pick` | float \| None | ADP, when available. Ranking context for FR-010. |
+| `average_pick` | float \| None | ADP, when available. **Currently always `None`** — `yahoo_fantasy_api` has no draft-analysis/ADP endpoint (verified against source during implementation); this needs a supplementary data source to populate. Not a bug — a disclosed gap. |
 
 **Immutability**: `player_id`, `name`, `positions`, `nfl_team` are treated as
 immutable for the duration of a draft — this is what makes the R4 name cache

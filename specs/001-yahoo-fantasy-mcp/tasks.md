@@ -74,23 +74,23 @@ token expiry succeeds with no manual re-auth (quickstart V1, V2).
 
 ### Tests for User Story 1 ⚠️ Write FIRST, observe FAILING
 
-- [ ] T015 [P] [US1] Write failing test in `tests/unit/test_auth.py` for automatic token refresh on expired access token (FR-003, US1 scenario 2)
-- [ ] T016 [P] [US1] Write failing test in `tests/unit/test_auth.py` asserting `AUTH_EXPIRED` and `LEAGUE_NOT_PROVISIONED` are distinct outcomes for two different 401 responses (FR-007 — both arrive as HTTP 401)
-- [ ] T017 [P] [US1] Write failing test in `tests/unit/test_auth.py` asserting `check_auth` output contains no token, secret, or fragment thereof (FR-002)
-- [ ] T018 [P] [US1] Write failing contract tests in `tests/integration/test_tools.py` for `get_league_info`, `list_teams`, `get_roster`, `get_standings` against fixtures (FR-004/005/006)
+- [X] T015 [P] [US1] Write failing test in `tests/unit/test_auth.py` for automatic token refresh on expired access token (FR-003, US1 scenario 2)
+- [X] T016 [P] [US1] Write failing test in `tests/unit/test_auth.py` asserting `AUTH_EXPIRED` and `LEAGUE_NOT_PROVISIONED` are distinct outcomes for two different 401 responses (FR-007 — both arrive as HTTP 401)
+- [X] T017 [P] [US1] Write failing test in `tests/unit/test_auth.py` asserting `check_auth` output contains no token, secret, or fragment thereof (FR-002)
+- [X] T018 [P] [US1] Write failing contract tests in `tests/integration/test_tools.py` for `get_league_info`, `list_teams`, `get_roster`, `get_standings` against fixtures (FR-004/005/006)
 
 ### Implementation for User Story 1
 
-- [ ] T019 [US1] Implement OAuth login flow (one-time consent, token file at gitignored path) in `src/yahoo_fantasy_mcp/auth.py` (FR-001)
-- [ ] T020 [US1] Implement automatic token refresh via `yahoo_oauth` in `src/yahoo_fantasy_mcp/auth.py`, passing T015 (FR-003)
-- [ ] T021 [US1] Implement 401/403 classification distinguishing credential-expiry from league-not-provisioned in `src/yahoo_fantasy_mcp/auth.py`, passing T016 (FR-007, research R6)
-- [ ] T022 [US1] Implement `check_auth` tool in `src/yahoo_fantasy_mcp/server.py` returning only booleans and duration, passing T017
-- [ ] T023 [P] [US1] Implement `get_league_info` tool in `src/yahoo_fantasy_mcp/server.py` (FR-004, FR-012 single configured league)
-- [ ] T024 [P] [US1] Implement `list_teams` tool with `is_owned_by_user` flag in `src/yahoo_fantasy_mcp/server.py` (FR-004)
-- [ ] T025 [P] [US1] Implement `get_roster` tool in `src/yahoo_fantasy_mcp/server.py`, defaulting to the user's own team (FR-005)
-- [ ] T026 [P] [US1] Implement `get_standings` tool in `src/yahoo_fantasy_mcp/server.py` (FR-006)
-- [ ] T027 [US1] Implement stdio entrypoint in `src/yahoo_fantasy_mcp/__main__.py` registering the FastMCP server (research R7)
-- [ ] T028 [US1] Write tool descriptions in `src/yahoo_fantasy_mcp/server.py` matching wired behavior only — no claimed analysis/recommendation capability (FR-011, Principle IV)
+- [X] T019 [US1] Implement OAuth login flow (one-time consent, token file at gitignored path) in `src/yahoo_fantasy_mcp/auth.py` (FR-001)
+- [X] T020 [US1] Implement automatic token refresh via `yahoo_oauth` in `src/yahoo_fantasy_mcp/auth.py`, passing T015 (FR-003)
+- [X] T021 [US1] Implement 401/403 classification distinguishing credential-expiry from league-not-provisioned in `src/yahoo_fantasy_mcp/auth.py`, passing T016 (FR-007, research R6)
+- [X] T022 [US1] Implement `check_auth` tool in `src/yahoo_fantasy_mcp/server.py` returning only booleans and duration, passing T017
+- [X] T023 [P] [US1] Implement `get_league_info` tool in `src/yahoo_fantasy_mcp/server.py` (FR-004, FR-012 single configured league)
+- [X] T024 [P] [US1] Implement `list_teams` tool with `is_owned_by_user` flag in `src/yahoo_fantasy_mcp/server.py` (FR-004)
+- [X] T025 [P] [US1] Implement `get_roster` tool in `src/yahoo_fantasy_mcp/server.py`, defaulting to the user's own team (FR-005)
+- [X] T026 [P] [US1] Implement `get_standings` tool in `src/yahoo_fantasy_mcp/server.py` (FR-006)
+- [X] T027 [US1] Implement stdio entrypoint in `src/yahoo_fantasy_mcp/__main__.py` registering the FastMCP server (research R7)
+- [X] T028 [US1] Write tool descriptions in `src/yahoo_fantasy_mcp/server.py` matching wired behavior only — no claimed analysis/recommendation capability (FR-011, Principle IV)
 
 **Checkpoint**: US1 fully functional — server connects, survives refresh, reads league data. **This is the MVP.**
 

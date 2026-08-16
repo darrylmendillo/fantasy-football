@@ -46,7 +46,7 @@ class FixtureDataSource:
             "draft_status": "drafting",
         }
 
-    def fetch_teams_raw(self) -> dict[str, Any]:
+    def fetch_teams_raw(self) -> list[dict[str, Any]]:
         return self._teams
 
     def fetch_roster_raw(self, team_key: str) -> dict[str, Any]:
