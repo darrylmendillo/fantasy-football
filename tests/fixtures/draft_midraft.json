@@ -1,0 +1,7 @@
+[
+  {"pick": 1, "round": 1, "team_key": "449.l.99001.t.1", "player_id": 9001},
+  {"pick": 2, "round": 1, "team_key": "449.l.99001.t.2", "player_id": 9002},
+  {"pick": 3, "round": 1, "team_key": "449.l.99001.t.3", "player_id": 9003},
+  {"pick": 4, "round": 1, "team_key": "449.l.99001.t.4", "player_id": 9004},
+  {"pick": 5, "round": 2, "team_key": "449.l.99001.t.4", "player_id": 9005}
+]

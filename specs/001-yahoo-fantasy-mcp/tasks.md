@@ -34,12 +34,12 @@ plan.md Structure Decision.
 
 **Purpose**: Project initialization and dependency pinning
 
-- [ ] T001 Create project structure `src/yahoo_fantasy_mcp/` and `tests/{unit,integration,fixtures}/` per plan.md
-- [ ] T002 Create `pyproject.toml` pinning Python 3.11, `fastmcp==3.4.7`, `yahoo_fantasy_api==2.12.3`, `yahoo_oauth==2.1.1`, `pytest` (versions from research.md R1/R7)
-- [ ] T003 [P] Configure `ruff` lint + format rules in `pyproject.toml`
-- [ ] T004 [P] Create `.env.example` in repo root with `YAHOO_CLIENT_ID`, `YAHOO_CLIENT_SECRET`, `YAHOO_LEAGUE_KEY`, `YAHOO_POLL_INTERVAL_SECONDS` as empty placeholders — **no real values** (FR-002)
-- [ ] T005 [P] Configure pytest (testpaths, fixture discovery) in `pyproject.toml`
-- [ ] T006 Verify `.gitignore` already covers `.env`, `oauth2.json`, `.yahoo_token.json` and confirm with `git check-ignore -v` (Principle III)
+- [X] T001 Create project structure `src/yahoo_fantasy_mcp/` and `tests/{unit,integration,fixtures}/` per plan.md
+- [X] T002 Create `pyproject.toml` pinning Python 3.11, `fastmcp==3.4.7`, `yahoo_fantasy_api==2.12.3`, `yahoo_oauth==2.1.1`, `pytest` (versions from research.md R1/R7)
+- [X] T003 [P] Configure `ruff` lint + format rules in `pyproject.toml`
+- [X] T004 [P] Create `.env.example` in repo root with `YAHOO_CLIENT_ID`, `YAHOO_CLIENT_SECRET`, `YAHOO_LEAGUE_KEY`, `YAHOO_POLL_INTERVAL_SECONDS` as empty placeholders — **no real values** (FR-002)
+- [X] T005 [P] Configure pytest (testpaths, fixture discovery) in `pyproject.toml`
+- [X] T006 Verify `.gitignore` already covers `.env`, `oauth2.json`, `.yahoo_token.json` and confirm with `git check-ignore -v` (Principle III)
 
 ---
 
@@ -50,14 +50,14 @@ user story depends on
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T007 [P] Implement `ErrorCode` enum and typed exceptions in `src/yahoo_fantasy_mcp/errors.py` — all 7 codes from contracts/mcp-tools.md
-- [ ] T008 [P] Implement config loading (league key, poll interval, credential paths) in `src/yahoo_fantasy_mcp/config.py`
-- [ ] T009 [P] Create Yahoo JSON test fixtures in `tests/fixtures/`: `draft_predraft.json`, `draft_midraft.json`, `draft_postdraft.json`, `draft_auction.json`, `roster.json`, `standings.json`, `teams.json`, `player_details.json`
-- [ ] T010 [P] Write failing entity tests in `tests/unit/test_models.py` covering League, Team, Player, DraftPick, Draft, Roster per data-model.md
-- [ ] T011 Implement domain entities in `src/yahoo_fantasy_mcp/models.py` to pass T010 — **no `is_available` field on Player** (data-model.md Availability Invariant)
-- [ ] T012 Write failing test in `tests/unit/test_errors.py` asserting no tool output or log line contains a token value (FR-002, Principle III)
-- [ ] T013 Implement logging configuration in `src/yahoo_fantasy_mcp/errors.py` (or `logging.py`) that redacts credential values, passing T012
-- [ ] T014 Implement Yahoo API boundary in `src/yahoo_fantasy_mcp/client.py` — raw request wrapper returning domain models, keeping Yahoo JSON quirks out of the tool layer
+- [X] T007 [P] Implement `ErrorCode` enum and typed exceptions in `src/yahoo_fantasy_mcp/errors.py` — all 7 codes from contracts/mcp-tools.md
+- [X] T008 [P] Implement config loading (league key, poll interval, credential paths) in `src/yahoo_fantasy_mcp/config.py`
+- [X] T009 [P] Create Yahoo JSON test fixtures in `tests/fixtures/`: `draft_predraft.json`, `draft_midraft.json`, `draft_postdraft.json`, `draft_auction.json`, `roster.json`, `standings.json`, `teams.json`, `player_details.json`
+- [X] T010 [P] Write failing entity tests in `tests/unit/test_models.py` covering League, Team, Player, DraftPick, Draft, Roster per data-model.md
+- [X] T011 Implement domain entities in `src/yahoo_fantasy_mcp/models.py` to pass T010 — **no `is_available` field on Player** (data-model.md Availability Invariant)
+- [X] T012 Write failing test in `tests/unit/test_errors.py` asserting no tool output or log line contains a token value (FR-002, Principle III)
+- [X] T013 Implement logging configuration in `src/yahoo_fantasy_mcp/errors.py` (or `logging.py`) that redacts credential values, passing T012
+- [X] T014 Implement Yahoo API boundary in `src/yahoo_fantasy_mcp/client.py` — raw request wrapper returning domain models, keeping Yahoo JSON quirks out of the tool layer
 
 **Checkpoint**: Shared types, errors, and API boundary ready — user stories can begin
 

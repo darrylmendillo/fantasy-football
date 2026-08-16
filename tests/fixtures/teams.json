@@ -1,0 +1,9 @@
+{
+  "my_team_key": "449.l.99001.t.1",
+  "teams": [
+    {"team_key": "449.l.99001.t.1", "name": "Team Chaos"},
+    {"team_key": "449.l.99001.t.2", "name": "Gridiron Gurus"},
+    {"team_key": "449.l.99001.t.3", "name": "Turf Wars"},
+    {"team_key": "449.l.99001.t.4", "name": "Pigskin Prophets"}
+  ]
+}

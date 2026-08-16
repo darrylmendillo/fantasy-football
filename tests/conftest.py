@@ -1,0 +1,72 @@
+"""Shared test fixtures: JSON loading + a YahooDataSource test double.
+
+FixtureDataSource lets every test file exercise real parsing/derivation
+logic against realistic yahoo_fantasy_api-shaped data with zero network
+calls, per quickstart.md's "Automated test expectations" (fixtures, not
+live calls).
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+def load_fixture(name: str) -> Any:
+    with open(FIXTURES_DIR / name) as f:
+        return json.load(f)
+
+
+class FixtureDataSource:
+    """A YahooDataSource backed by static JSON fixtures.
+
+    `draft_fixture` selects which draft_*.json file fetch_draft_results_raw
+    returns, so tests can swap draft state without touching anything else.
+    """
+
+    def __init__(self, draft_fixture: str = "draft_midraft.json") -> None:
+        self.draft_fixture = draft_fixture
+        self._teams = load_fixture("teams.json")
+        self._standings = load_fixture("standings.json")
+        self._roster = load_fixture("roster.json")
+        self._player_details = load_fixture("player_details.json")
+
+    def fetch_league_raw(self) -> dict[str, Any]:
+        return {
+            "league_key": "449.l.99001",
+            "name": "Sunday Funday",
+            "season": 2026,
+            "num_teams": 4,
+            "scoring_type": "head",
+            "draft_status": "drafting",
+        }
+
+    def fetch_teams_raw(self) -> dict[str, Any]:
+        return self._teams
+
+    def fetch_roster_raw(self, team_key: str) -> dict[str, Any]:
+        assert team_key == self._roster["team_key"]
+        return self._roster
+
+    def fetch_standings_raw(self) -> list[dict[str, Any]]:
+        return self._standings
+
+    def fetch_draft_results_raw(self) -> list[dict[str, Any]]:
+        return load_fixture(self.draft_fixture)
+
+    def fetch_player_details_raw(self, player_ids: list[int]) -> dict[str, dict[str, Any]]:
+        return {
+            str(pid): self._player_details[str(pid)]
+            for pid in player_ids
+            if str(pid) in self._player_details
+        }
+
+
+@pytest.fixture
+def fixture_source() -> FixtureDataSource:
+    return FixtureDataSource()

@@ -1,0 +1,20 @@
+{
+  "9001": {"player_id": 9001, "name": "Bijan Robinson", "eligible_positions": ["RB"], "editorial_team_abbr": "ATL", "percent_owned": 99, "average_pick": 1.2},
+  "9002": {"player_id": 9002, "name": "CeeDee Lamb", "eligible_positions": ["WR"], "editorial_team_abbr": "DAL", "percent_owned": 99, "average_pick": 2.1},
+  "9003": {"player_id": 9003, "name": "Tyreek Hill", "eligible_positions": ["WR"], "editorial_team_abbr": "MIA", "percent_owned": 99, "average_pick": 3.4},
+  "9004": {"player_id": 9004, "name": "Justin Jefferson", "eligible_positions": ["WR"], "editorial_team_abbr": "MIN", "percent_owned": 99, "average_pick": 4.0},
+  "9005": {"player_id": 9005, "name": "Christian McCaffrey", "eligible_positions": ["RB"], "editorial_team_abbr": "SF", "percent_owned": 98, "average_pick": 5.6},
+  "9006": {"player_id": 9006, "name": "Amon-Ra St. Brown", "eligible_positions": ["WR"], "editorial_team_abbr": "DET", "percent_owned": 97, "average_pick": 6.3},
+  "9007": {"player_id": 9007, "name": "Breece Hall", "eligible_positions": ["RB"], "editorial_team_abbr": "NYJ", "percent_owned": 96, "average_pick": 7.8},
+  "9008": {"player_id": 9008, "name": "Josh Allen", "eligible_positions": ["QB"], "editorial_team_abbr": "BUF", "percent_owned": 95, "average_pick": 8.9},
+  "9009": {"player_id": 9009, "name": "Travis Kelce", "eligible_positions": ["TE"], "editorial_team_abbr": "KC", "percent_owned": 94, "average_pick": 9.5},
+  "9010": {"player_id": 9010, "name": "Ja'Marr Chase", "eligible_positions": ["WR"], "editorial_team_abbr": "CIN", "percent_owned": 99, "average_pick": 10.1},
+  "9011": {"player_id": 9011, "name": "Saquon Barkley", "eligible_positions": ["RB"], "editorial_team_abbr": "PHI", "percent_owned": 93, "average_pick": 11.2},
+  "9012": {"player_id": 9012, "name": "A.J. Brown", "eligible_positions": ["WR"], "editorial_team_abbr": "PHI", "percent_owned": 92, "average_pick": 12.4},
+
+  "40001": {"player_id": 40001, "name": "Jonathon Brooks", "eligible_positions": ["RB"], "editorial_team_abbr": "CAR", "percent_owned": 62, "average_pick": 71.4},
+  "40002": {"player_id": 40002, "name": "Rome Odunze", "eligible_positions": ["WR"], "editorial_team_abbr": "CHI", "percent_owned": 58, "average_pick": 75.0},
+  "40003": {"player_id": 40003, "name": "Trey McBride", "eligible_positions": ["TE"], "editorial_team_abbr": "ARI", "percent_owned": 55, "average_pick": 80.2},
+  "40004": {"player_id": 40004, "name": "Jayden Daniels", "eligible_positions": ["QB"], "editorial_team_abbr": "WAS", "percent_owned": 50, "average_pick": 90.7},
+  "40005": {"player_id": 40005, "name": "Rachaad White", "eligible_positions": ["RB", "W/R/T"], "editorial_team_abbr": "TB", "percent_owned": 45, "average_pick": 95.3}
+}

@@ -1,0 +1,9 @@
+{
+  "team_key": "449.l.99001.t.1",
+  "players": [
+    {"player_id": 9001, "name": "Bijan Robinson", "eligible_positions": ["RB"], "editorial_team_abbr": "ATL"},
+    {"player_id": 9004, "name": "Justin Jefferson", "eligible_positions": ["WR"], "editorial_team_abbr": "MIN"},
+    {"player_id": 9008, "name": "Josh Allen", "eligible_positions": ["QB"], "editorial_team_abbr": "BUF"},
+    {"player_id": 9009, "name": "Travis Kelce", "eligible_positions": ["TE"], "editorial_team_abbr": "KC"}
+  ]
+}
