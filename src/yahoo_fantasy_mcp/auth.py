@@ -66,21 +66,48 @@ def build_check_auth_result(provider: TokenProvider, expires_in_seconds: int) ->
     }
 
 
+def ensure_seed_file(token_path: str, client_id: str, client_secret: str) -> None:
+    """Pre-seed the token file yahoo_oauth.OAuth2(from_file=...) will load.
+
+    Verified against yahoo_oauth's actual source (not assumed): when
+    `from_file` is passed, OAuth2.__init__ calls open(from_file)
+    immediately — a missing file raises FileNotFoundError instead of
+    starting the consent flow — and any client_id/client_secret passed as
+    constructor arguments are silently ignored in that branch; only the
+    file's contents are used. So the file must exist first, containing
+    exactly the two keys OAuth2 expects (consumer_key/consumer_secret),
+    before OAuth2() is ever constructed. If the file already has tokens in
+    it (a real login already happened), this is a no-op — never
+    overwrite real credentials back to a bare seed.
+    """
+    import json
+    import os
+
+    if os.path.exists(token_path):
+        return
+    os.makedirs(os.path.dirname(token_path), exist_ok=True)
+    with open(token_path, "w") as f:
+        json.dump({"consumer_key": client_id, "consumer_secret": client_secret}, f)
+
+
 def login(client_id: str, client_secret: str, token_path: str) -> TokenProvider:
     """One-time interactive OAuth consent flow (FR-001).
 
     Delegates to yahoo_oauth.OAuth2, which opens a browser for consent and
     persists the resulting token to `token_path` (a gitignored local path
-    — see config.DEFAULT_TOKEN_PATH). This function is exercised by
-    quickstart.md V1, not by the unit suite: it requires a real browser
-    and a real Yahoo account, which is exactly why ensure_fresh() and
-    classify_auth_failure() above are factored out as pure, independently
-    testable logic instead of being buried inside this call.
+    — see config.DEFAULT_TOKEN_PATH). ensure_seed_file() above is what
+    makes the *first-ever* call here work rather than crash — see its
+    docstring. This function itself is exercised by quickstart.md V1, not
+    the unit suite: it requires a real browser and a real Yahoo account,
+    which is exactly why ensure_fresh(), classify_auth_failure(), and
+    ensure_seed_file() are factored out as pure, independently testable
+    logic instead of being buried inside this call.
     """
     from yahoo_oauth import OAuth2  # imported lazily so unit tests never require it
 
+    ensure_seed_file(token_path, client_id, client_secret)
     logger.info("starting Yahoo OAuth consent flow (token_path=%s)", mask_secrets(token_path))
-    oauth = OAuth2(client_id, client_secret, from_file=token_path)
+    oauth = OAuth2(None, None, from_file=token_path)
     if not oauth.token_is_valid():
         oauth.refresh_access_token()
     return oauth
