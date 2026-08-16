@@ -66,6 +66,16 @@ class FixtureDataSource:
             if str(pid) in self._player_details
         }
 
+    def fetch_player_universe_raw(self, positions: list[str]) -> dict[str, dict[str, Any]]:
+        """The full player_details fixture pool, filtered to the requested
+        positions — stands in for a one-time free_agents() seed (see
+        YahooFantasyApiDataSource.fetch_player_universe_raw)."""
+        return {
+            pid: p
+            for pid, p in self._player_details.items()
+            if any(pos in p["eligible_positions"] for pos in positions)
+        }
+
 
 @pytest.fixture
 def fixture_source() -> FixtureDataSource:

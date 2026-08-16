@@ -39,6 +39,7 @@ class YahooDataSource(Protocol):
     def fetch_standings_raw(self) -> list[dict[str, Any]]: ...
     def fetch_draft_results_raw(self) -> list[dict[str, Any]]: ...
     def fetch_player_details_raw(self, player_ids: list[int]) -> dict[str, dict[str, Any]]: ...
+    def fetch_player_universe_raw(self, positions: list[str]) -> dict[str, dict[str, Any]]: ...
 
 
 def _player_from_raw(raw: dict[str, Any]) -> Player:
@@ -106,6 +107,16 @@ class YahooClient:
         raw = self._source.fetch_player_details_raw(player_ids)
         return {pid: _player_from_raw(p) for pid, p in ((int(k), v) for k, v in raw.items())}
 
+    def get_player_universe(self, positions: list[str]) -> dict[int, Player]:
+        """The candidate pool for get_available_players. See
+        YahooFantasyApiDataSource.fetch_player_universe_raw for why this is
+        safe despite research R3: each position is seeded from
+        free_agents() exactly once, ever — availability is always derived
+        fresh from draft_results() afterward (draft.derive_available_players),
+        never re-read from this call."""
+        raw = self._source.fetch_player_universe_raw(positions)
+        return {pid: _player_from_raw(p) for pid, p in ((int(k), v) for k, v in raw.items())}
+
 
 def _flatten_name(name: Any) -> str:
     """yahoo_fantasy_api's own docstrings disagree with each other on shape:
@@ -162,6 +173,9 @@ class YahooFantasyApiDataSource:
         # Player identity is immutable during a draft (research R4) — safe
         # to cache for the process lifetime, unlike availability (R3).
         self._player_identity_cache: dict[int, dict[str, Any]] = {}
+        # Position -> {player_id -> raw dict}. Seeded from free_agents() at
+        # most once per position, ever — see fetch_player_universe_raw.
+        self._player_universe_cache: dict[str, dict[int, dict[str, Any]]] = {}
 
     def _call(self, fn, *args, **kwargs):
         import time
@@ -281,3 +295,36 @@ class YahooFantasyApiDataSource:
                 "average_pick": None,
             }
         return result
+
+    def fetch_player_universe_raw(self, positions: list[str]) -> dict[str, dict[str, Any]]:
+        """Seed the draftable-player pool via free_agents(position), exactly
+        ONCE per position for the life of this process (self._universe_cache
+        below), regardless of how many times this method is called.
+
+        This is deliberately different from how free_agents() is normally
+        dangerous (research R3): the danger there is treating its result as
+        *live* availability on every poll. Here we use it exactly once, as a
+        point-in-time enumeration of "players that exist" — who currently
+        holds them is irrelevant to that enumeration and is figured out
+        separately, fresh, from draft_results() every time
+        (draft.derive_available_players). A cache with no TTL is only a bug
+        if you need the value to change; this call site never does.
+        """
+        missing_positions = [p for p in positions if p not in self._player_universe_cache]
+        for pos in missing_positions:
+            raw_players = self._call(self._league.free_agents, pos)
+            for p in raw_players:
+                pid = int(p["player_id"])
+                self._player_universe_cache[pos] = self._player_universe_cache.get(pos, {})
+                self._player_universe_cache[pos][pid] = {
+                    "player_id": pid,
+                    "name": _flatten_name(p["name"]),
+                    "eligible_positions": _flatten_positions(p["eligible_positions"]),
+                    "editorial_team_abbr": p.get("editorial_team_abbr", ""),
+                }
+
+        merged: dict[str, dict[str, Any]] = {}
+        for pos in positions:
+            for pid, entry in self._player_universe_cache.get(pos, {}).items():
+                merged[str(pid)] = entry
+        return merged

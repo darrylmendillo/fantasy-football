@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from yahoo_fantasy_mcp.client import YahooClient
 from yahoo_fantasy_mcp.server import (
+    tool_get_available_players,
     tool_get_draft_results,
     tool_get_league_info,
     tool_get_roster,
@@ -93,3 +94,36 @@ class TestGetDraftResults:
         assert result["is_complete"] is True
         assert result["draft_status"] == "postdraft"
         assert len(result["picks"]) == 12
+
+
+class TestGetAvailablePlayers:
+    def test_shape(self, fixture_source):
+        fixture_source.draft_fixture = "draft_midraft.json"
+        client = YahooClient(fixture_source)
+        result = tool_get_available_players(client, TOTAL_EXPECTED_PICKS, position=None, limit=50)
+        assert result["retrieved_at"]
+        assert result["count"] == len(result["players"])
+        assert all("average_pick" in p for p in result["players"])
+
+    def test_position_filter(self, fixture_source):
+        fixture_source.draft_fixture = "draft_midraft.json"
+        client = YahooClient(fixture_source)
+        result = tool_get_available_players(
+            client, TOTAL_EXPECTED_PICKS, position="RB", limit=50
+        )
+        assert all("RB" in p["positions"] for p in result["players"])
+
+    def test_never_overlaps_with_draft_results_same_call(self, fixture_source):
+        """SC-002 at the tool boundary: a client calling both tools during a
+        live draft must never see the same player in both responses."""
+        fixture_source.draft_fixture = "draft_midraft.json"
+        client = YahooClient(fixture_source)
+
+        draft_result = tool_get_draft_results(client, TOTAL_EXPECTED_PICKS)
+        available_result = tool_get_available_players(
+            client, TOTAL_EXPECTED_PICKS, position=None, limit=50
+        )
+
+        drafted_ids = {p["player_id"] for p in draft_result["picks"]}
+        available_ids = {p["player_id"] for p in available_result["players"]}
+        assert drafted_ids & available_ids == set()

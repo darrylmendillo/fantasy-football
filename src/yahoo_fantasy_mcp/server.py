@@ -118,6 +118,47 @@ def tool_get_draft_results(client: YahooClient, total_expected_picks: int) -> di
     }
 
 
+# Core Yahoo NFL fantasy positions used to seed the player universe when no
+# position filter is given (see client.get_player_universe / research note
+# in YahooFantasyApiDataSource.fetch_player_universe_raw — each is fetched
+# via free_agents() at most once, ever, not per poll).
+CORE_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"]
+
+
+def tool_get_available_players(
+    client: YahooClient, total_expected_picks: int, position: str | None, limit: int
+) -> dict:
+    """FR-010. Availability is derived from the SAME fresh draft read used
+    by get_draft_results — never from a cached free-agent list (research
+    R3, draft.derive_available_players)."""
+    from yahoo_fantasy_mcp.draft import derive_available_players
+
+    raw_picks = client.fetch_draft_results_raw()
+    draft = build_draft_snapshot(raw_picks, total_expected_picks=total_expected_picks)
+
+    seed_positions = [position] if position else CORE_POSITIONS
+    universe = client.get_player_universe(seed_positions)
+
+    available = derive_available_players(draft, universe, position=position, limit=limit)
+
+    return {
+        "retrieved_at": draft.retrieved_at.isoformat(),
+        "position": position,
+        "count": len(available),
+        "players": [
+            {
+                "player_id": p.player_id,
+                "name": p.name,
+                "positions": p.positions,
+                "nfl_team": p.nfl_team,
+                "percent_owned": p.percent_owned,
+                "average_pick": p.average_pick,
+            }
+            for p in available
+        ],
+    }
+
+
 class ServerContext:
     """Holds the process-lifetime client + auth handle the FastMCP tool
     wrappers close over. Constructed once in __main__.py."""
@@ -212,3 +253,19 @@ def register_tools(mcp_server: FastMCP, ctx: ServerContext) -> None:
     @_guarded
     def get_draft_results() -> dict:
         return tool_get_draft_results(ctx.client, ctx.total_expected_picks)
+
+    @mcp_server.tool(
+        name="get_available_players",
+        description=(
+            "Return currently undrafted players in the configured league, "
+            "with percent-owned ranking context (average_pick/ADP is not "
+            "currently available from the underlying data source and is "
+            "always null). Guaranteed to exclude every player already "
+            "returned by get_draft_results for the same retrieved_at. "
+            "Optionally filter by position. Read-only; does not recommend "
+            "or rank who to pick."
+        ),
+    )
+    @_guarded
+    def get_available_players(position: str | None = None, limit: int = 50) -> dict:
+        return tool_get_available_players(ctx.client, ctx.total_expected_picks, position, limit)

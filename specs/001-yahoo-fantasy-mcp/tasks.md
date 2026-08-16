@@ -147,17 +147,17 @@ but it is not independently **implementable** before US2.
 
 ### Tests for User Story 3 ⚠️ Write FIRST, observe FAILING
 
-- [ ] T043 [P] [US3] Write failing test in `tests/unit/test_draft.py` asserting **the intersection of drafted IDs and available IDs is empty** for the mid-draft fixture — the machine-checkable form of SC-002 and the highest-value test in this suite (FR-010, research R3)
-- [ ] T044 [P] [US3] Write failing test in `tests/unit/test_draft.py` asserting the invariant in T043 still holds after advancing to a later-stage draft fixture (catches cache-staleness bugs that only appear deep into a draft)
-- [ ] T045 [P] [US3] Write failing test in `tests/unit/test_draft.py` asserting position filtering returns only players eligible at that position, with multi-eligible players appearing under each (US3 scenario 2)
+- [X] T043 [P] [US3] Write failing test in `tests/unit/test_draft.py` asserting **the intersection of drafted IDs and available IDs is empty** for the mid-draft fixture — the machine-checkable form of SC-002 and the highest-value test in this suite (FR-010, research R3)
+- [X] T044 [P] [US3] Write failing test in `tests/unit/test_draft.py` asserting the invariant in T043 still holds after advancing to a later-stage draft fixture (catches cache-staleness bugs that only appear deep into a draft)
+- [X] T045 [P] [US3] Write failing test in `tests/unit/test_draft.py` asserting position filtering returns only players eligible at that position, with multi-eligible players appearing under each (US3 scenario 2)
 
 ### Implementation for User Story 3
 
-- [ ] T046 [US3] Implement availability derivation as `player_universe − drafted_ids` in `src/yahoo_fantasy_mcp/draft.py`, passing T043-T044 — **MUST NOT call the library's `free_agents()` or `taken_players()`**, whose caches never expire (research R3)
-- [ ] T047 [US3] Implement position filtering on eligibility in `src/yahoo_fantasy_mcp/draft.py`, passing T045
-- [ ] T048 [US3] Attach ranking context (`percent_owned`, `average_pick`) to available players in `src/yahoo_fantasy_mcp/draft.py` (FR-010) — not cached across polls (data-model.md)
-- [ ] T049 [US3] Implement `get_available_players` tool with `position` and `limit` params in `src/yahoo_fantasy_mcp/server.py`, sharing the same fresh draft read as `get_draft_results`
-- [ ] T050 [US3] Add contract test for `get_available_players` response shape in `tests/integration/test_tools.py` per contracts/mcp-tools.md
+- [X] T046 [US3] Implement availability derivation as `player_universe − drafted_ids` in `src/yahoo_fantasy_mcp/draft.py`, passing T043-T044 — **MUST NOT call the library's `free_agents()` or `taken_players()`**, whose caches never expire (research R3)
+- [X] T047 [US3] Implement position filtering on eligibility in `src/yahoo_fantasy_mcp/draft.py`, passing T045
+- [X] T048 [US3] Attach ranking context (`percent_owned`, `average_pick`) to available players in `src/yahoo_fantasy_mcp/draft.py` (FR-010) — not cached across polls (data-model.md)
+- [X] T049 [US3] Implement `get_available_players` tool with `position` and `limit` params in `src/yahoo_fantasy_mcp/server.py`, sharing the same fresh draft read as `get_draft_results`
+- [X] T050 [US3] Add contract test for `get_available_players` response shape in `tests/integration/test_tools.py` per contracts/mcp-tools.md
 
 **Checkpoint**: All three user stories independently functional
 

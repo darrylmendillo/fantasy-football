@@ -29,6 +29,7 @@ class _FakeLeague:
     def __init__(self) -> None:
         self.player_details_calls: list[list[int]] = []
         self.percent_owned_calls: list[list[int]] = []
+        self.free_agents_calls: list[str] = []
         self._raw_players = {
             9001: {
                 "player_id": "9001",
@@ -51,6 +52,17 @@ class _FakeLeague:
     def percent_owned(self, player_ids: list[int]) -> list[dict]:
         self.percent_owned_calls.append(list(player_ids))
         return [{"player_id": pid, "percent_owned": 90} for pid in player_ids]
+
+    def free_agents(self, position: str) -> list[dict]:
+        self.free_agents_calls.append(position)
+        return [
+            {
+                "player_id": "40001",
+                "name": "Jonathon Brooks",
+                "eligible_positions": [{"position": "RB"}],
+                "editorial_team_abbr": "CAR",
+            }
+        ]
 
 
 class TestPlayerIdentityCache:
@@ -123,3 +135,34 @@ class TestBackoff:
 
         with pytest.raises(RateLimitedError):
             source.fetch_league_raw()
+
+
+class TestPlayerUniverseSeeding:
+    """The player universe (candidate pool for get_available_players) is
+    seeded via free_agents() exactly ONCE per position, ever — not per poll.
+    That's what makes calling free_agents() safe despite research R3: we
+    never rely on it staying fresh, we only use its point-in-time snapshot
+    once and derive all subsequent availability from fresh draft_results()
+    (see draft.derive_available_players)."""
+
+    def test_fetches_once_per_position(self):
+        from yahoo_fantasy_mcp.client import YahooFantasyApiDataSource
+
+        league = _FakeLeague()
+        source = YahooFantasyApiDataSource(league, my_team_key="t.1")
+
+        source.fetch_player_universe_raw(["RB"])
+        source.fetch_player_universe_raw(["RB"])
+        source.fetch_player_universe_raw(["RB", "WR"])
+
+        assert league.free_agents_calls.count("RB") == 1, "RB must only be fetched once, ever"
+
+    def test_returns_normalized_shape(self):
+        from yahoo_fantasy_mcp.client import YahooFantasyApiDataSource
+
+        league = _FakeLeague()
+        source = YahooFantasyApiDataSource(league, my_team_key="t.1")
+
+        universe = source.fetch_player_universe_raw(["RB"])
+        assert universe["40001"]["name"] == "Jonathon Brooks"
+        assert universe["40001"]["eligible_positions"] == ["RB"]

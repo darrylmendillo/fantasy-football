@@ -87,3 +87,107 @@ class TestDuplicatePickDetection:
         ]
         with pytest.raises(UpstreamError):
             build_draft_snapshot(raw, total_expected_picks=TOTAL_EXPECTED_PICKS)
+
+
+# Full pool of players under consideration in the test fixtures: 12 drafted
+# (9001-9012) + 5 undrafted (40001-40005). See tests/fixtures/player_details.json.
+ALL_TEST_PLAYER_IDS = list(range(9001, 9013)) + list(range(40001, 40006))
+
+
+class TestAvailabilityInvariant:
+    """The highest-value test in this suite (research R3, SC-002): available
+    players must never overlap with drafted players. This is the guard
+    against the exact upstream cache-staleness bug identified in research.md
+    — free_agents()/taken_players() cache forever with no TTL, so calling
+    them during a live draft would silently report drafted players as
+    available. derive_available_players() must be immune to that by
+    construction."""
+
+    def test_empty_intersection_midraft(self, fixture_source):
+        from yahoo_fantasy_mcp.client import YahooClient
+        from yahoo_fantasy_mcp.draft import build_draft_snapshot, derive_available_players
+
+        fixture_source.draft_fixture = "draft_midraft.json"
+        client = YahooClient(fixture_source)
+        draft = build_draft_snapshot(
+            client.fetch_draft_results_raw(), total_expected_picks=TOTAL_EXPECTED_PICKS
+        )
+        universe = client.get_player_details(ALL_TEST_PLAYER_IDS)
+
+        available = derive_available_players(draft, universe)
+        available_ids = {p.player_id for p in available}
+        drafted_ids = draft.drafted_player_ids()
+
+        assert available_ids & drafted_ids == set(), (
+            "SC-002 violation: a drafted player was returned as available"
+        )
+        assert drafted_ids == {9001, 9002, 9003, 9004, 9005}
+
+    def test_empty_intersection_holds_deep_into_draft(self, fixture_source):
+        """T044: re-assert the invariant against a later-stage draft — this
+        is where the R3 caching bug class would actually surface if
+        derive_available_players ever regressed to using a cached call."""
+        from yahoo_fantasy_mcp.client import YahooClient
+        from yahoo_fantasy_mcp.draft import build_draft_snapshot, derive_available_players
+
+        fixture_source.draft_fixture = "draft_postdraft.json"
+        client = YahooClient(fixture_source)
+        draft = build_draft_snapshot(
+            client.fetch_draft_results_raw(), total_expected_picks=TOTAL_EXPECTED_PICKS
+        )
+        universe = client.get_player_details(ALL_TEST_PLAYER_IDS)
+
+        available = derive_available_players(draft, universe)
+        available_ids = {p.player_id for p in available}
+
+        assert available_ids & draft.drafted_player_ids() == set()
+        assert available_ids == {40001, 40002, 40003, 40004, 40005}
+
+    def test_predraft_all_players_available(self, fixture_source):
+        from yahoo_fantasy_mcp.client import YahooClient
+        from yahoo_fantasy_mcp.draft import build_draft_snapshot, derive_available_players
+
+        fixture_source.draft_fixture = "draft_predraft.json"
+        client = YahooClient(fixture_source)
+        draft = build_draft_snapshot(
+            client.fetch_draft_results_raw(), total_expected_picks=TOTAL_EXPECTED_PICKS
+        )
+        universe = client.get_player_details(ALL_TEST_PLAYER_IDS)
+
+        available = derive_available_players(draft, universe, limit=len(ALL_TEST_PLAYER_IDS))
+        assert {p.player_id for p in available} == set(ALL_TEST_PLAYER_IDS)
+
+
+class TestPositionFiltering:
+    def test_filters_to_eligible_position(self, fixture_source):
+        """US3 scenario 2: only players eligible at the requested position."""
+        from yahoo_fantasy_mcp.client import YahooClient
+        from yahoo_fantasy_mcp.draft import build_draft_snapshot, derive_available_players
+
+        fixture_source.draft_fixture = "draft_midraft.json"
+        client = YahooClient(fixture_source)
+        draft = build_draft_snapshot(
+            client.fetch_draft_results_raw(), total_expected_picks=TOTAL_EXPECTED_PICKS
+        )
+        universe = client.get_player_details(ALL_TEST_PLAYER_IDS)
+
+        rbs = derive_available_players(draft, universe, position="RB")
+        assert rbs
+        assert all("RB" in p.positions for p in rbs)
+
+    def test_multi_eligible_player_appears_under_each_position(self, fixture_source):
+        """Player 40005 (Rachaad White) is eligible at RB and W/R/T."""
+        from yahoo_fantasy_mcp.client import YahooClient
+        from yahoo_fantasy_mcp.draft import build_draft_snapshot, derive_available_players
+
+        fixture_source.draft_fixture = "draft_predraft.json"
+        client = YahooClient(fixture_source)
+        draft = build_draft_snapshot(
+            client.fetch_draft_results_raw(), total_expected_picks=TOTAL_EXPECTED_PICKS
+        )
+        universe = client.get_player_details([40005])
+
+        rb_results = derive_available_players(draft, universe, position="RB")
+        flex_results = derive_available_players(draft, universe, position="W/R/T")
+        assert any(p.player_id == 40005 for p in rb_results)
+        assert any(p.player_id == 40005 for p in flex_results)
