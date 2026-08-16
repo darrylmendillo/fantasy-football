@@ -167,10 +167,10 @@ but it is not independently **implementable** before US2.
 
 **Purpose**: Verification, documentation, and the pre-draft rehearsal
 
-- [ ] T051 [P] Write `README.md` with setup instructions mirroring quickstart.md
-- [ ] T052 [P] Audit `src/yahoo_fantasy_mcp/` for unwired code and verify every tool description in `src/yahoo_fantasy_mcp/server.py` matches actual behavior; delete anything unreachable from the entrypoint (FR-011, Principle IV)
-- [ ] T053 Run `pytest tests/` and confirm green with no network calls (fixtures only)
-- [ ] T054 Scan full git history for any token, secret, or `.env` content and confirm clean (SC-004)
+- [X] T051 [P] Write `README.md` with setup instructions mirroring quickstart.md
+- [X] T052 [P] Audit `src/yahoo_fantasy_mcp/` for unwired code and verify every tool description in `src/yahoo_fantasy_mcp/server.py` matches actual behavior; delete anything unreachable from the entrypoint (FR-011, Principle IV)
+- [X] T053 Run `pytest tests/` and confirm green with no network calls (fixtures only)
+- [X] T054 Scan full git history for any token, secret, or `.env` content and confirm clean (SC-004)
 - [ ] T055 Execute quickstart V1-V3 and V6-V8 manually against the real Yahoo account
 - [ ] T056 **Execute quickstart V4 and V5 during a Yahoo mock draft — before draft day.** This is the only way to prove live freshness and the availability invariant under real conditions (plan.md Key Risks)
 - [ ] T057 Tune the `YAHOO_POLL_INTERVAL_SECONDS` default in `src/yahoo_fantasy_mcp/config.py` and `.env.example` based on throttling observed in T056 (research R5)
@@ -265,3 +265,11 @@ failure mode this plan cannot recover from.
 - Commit after each task or logical group; reference `specs/001-yahoo-fantasy-mcp/`
 - The single highest-value test in this suite is T043 — it is the guard against
   the exact silent-staleness failure identified in research R3
+- **T055-T057 are intentionally left unchecked.** T001-T054 are done:
+  implementation, 57 passing tests (fixtures only, no network), lint clean,
+  README, full git-history secret scan clean. T055-T057 require a real Yahoo
+  Developer app, a real account, and (for T056) an actual scheduled mock
+  draft — none of which exist in the environment this was built in. This is
+  not a shortcut; it's the honest boundary between what's verifiable by an
+  automated agent and what needs a human with real Yahoo credentials. See
+  quickstart.md V1-V8 for exactly what to run and what "pass" looks like.
