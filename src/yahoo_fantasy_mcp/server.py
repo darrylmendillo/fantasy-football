@@ -16,6 +16,7 @@ from __future__ import annotations
 from fastmcp import FastMCP
 
 from yahoo_fantasy_mcp.client import YahooClient
+from yahoo_fantasy_mcp.draft import build_draft_snapshot
 from yahoo_fantasy_mcp.errors import YahooFantasyError
 
 mcp = FastMCP("yahoo-fantasy-mcp")
@@ -80,13 +81,51 @@ def tool_get_standings(client: YahooClient) -> dict:
     }
 
 
+def tool_get_draft_results(client: YahooClient, total_expected_picks: int) -> dict:
+    """The core live-draft tool (FR-008, FR-009). Exactly one Yahoo call
+    per invocation (research R5) — player names come from client.py's
+    identity cache, not a second fetch."""
+    raw_picks = client.fetch_draft_results_raw()
+    draft = build_draft_snapshot(raw_picks, total_expected_picks=total_expected_picks)
+
+    player_ids = [p.player_id for p in draft.picks]
+    players_by_id = client.get_player_details(player_ids) if player_ids else {}
+
+    return {
+        "draft_status": "postdraft" if draft.is_complete else (
+            "predraft" if not draft.picks else "drafting"
+        ),
+        "retrieved_at": draft.retrieved_at.isoformat(),
+        "is_complete": draft.is_complete,
+        "picks": [
+            {
+                "pick": p.pick,
+                "round": p.round,
+                "team_key": p.team_key,
+                "player_id": p.player_id,
+                "player_name": players_by_id[p.player_id].name
+                if p.player_id in players_by_id
+                else None,
+                "positions": players_by_id[p.player_id].positions
+                if p.player_id in players_by_id
+                else [],
+                "nfl_team": players_by_id[p.player_id].nfl_team
+                if p.player_id in players_by_id
+                else None,
+            }
+            for p in draft.picks
+        ],
+    }
+
+
 class ServerContext:
     """Holds the process-lifetime client + auth handle the FastMCP tool
     wrappers close over. Constructed once in __main__.py."""
 
-    def __init__(self, client: YahooClient, token_provider) -> None:
+    def __init__(self, client: YahooClient, token_provider, total_expected_picks: int) -> None:
         self.client = client
         self.token_provider = token_provider
+        self.total_expected_picks = total_expected_picks
 
 
 def register_tools(mcp_server: FastMCP, ctx: ServerContext) -> None:
@@ -160,3 +199,16 @@ def register_tools(mcp_server: FastMCP, ctx: ServerContext) -> None:
     @_guarded
     def get_standings() -> dict:
         return tool_get_standings(ctx.client)
+
+    @mcp_server.tool(
+        name="get_draft_results",
+        description=(
+            "Return every draft pick made so far in the configured league, in "
+            "order, with the pick/round/team/player and when this data was "
+            "read. Empty before the draft starts, complete after it ends. "
+            "Read-only — never submits a pick."
+        ),
+    )
+    @_guarded
+    def get_draft_results() -> dict:
+        return tool_get_draft_results(ctx.client, ctx.total_expected_picks)

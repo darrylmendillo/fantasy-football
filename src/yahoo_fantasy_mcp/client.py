@@ -148,24 +148,46 @@ class YahooFantasyApiDataSource:
     verified against a live account yet — flagged for quickstart V7/V8.
     """
 
+    # Throttle/server-error codes eligible for retry-with-backoff (research
+    # R5 — Yahoo publishes no documented limit, so treat these as transient).
+    _RETRYABLE_STATUS_CODES = (429, 500, 502, 503, 504)
+    _MAX_RETRIES = 3
+    _BACKOFF_BASE_SECONDS = 1.0
+
     def __init__(self, league: Any, my_team_key: str) -> None:
         # `league` is a yahoo_fantasy_api.League already constructed with an
         # authenticated session (see auth.login() + yahoo_fantasy_api.Game).
         self._league = league
         self._my_team_key = my_team_key
+        # Player identity is immutable during a draft (research R4) — safe
+        # to cache for the process lifetime, unlike availability (R3).
+        self._player_identity_cache: dict[int, dict[str, Any]] = {}
 
     def _call(self, fn, *args, **kwargs):
-        from yahoo_fantasy_mcp.auth import classify_auth_failure
+        import time
 
-        try:
-            return fn(*args, **kwargs)
-        except Exception as exc:  # noqa: BLE001 - narrowed below
-            response = getattr(exc, "response", None)
-            status_code = getattr(response, "status_code", None)
-            if status_code is not None:
-                body = getattr(response, "text", "") or ""
-                classify_auth_failure(status_code, body)
-            raise
+        from yahoo_fantasy_mcp.auth import classify_auth_failure
+        from yahoo_fantasy_mcp.errors import RateLimitedError
+
+        last_status: int | None = None
+        for attempt in range(self._MAX_RETRIES):
+            try:
+                return fn(*args, **kwargs)
+            except Exception as exc:  # noqa: BLE001 - narrowed below
+                response = getattr(exc, "response", None)
+                status_code = getattr(response, "status_code", None)
+                if status_code is None:
+                    raise
+                if status_code not in self._RETRYABLE_STATUS_CODES:
+                    body = getattr(response, "text", "") or ""
+                    classify_auth_failure(status_code, body)
+                    raise
+                last_status = status_code
+                if attempt < self._MAX_RETRIES - 1:
+                    time.sleep(self._BACKOFF_BASE_SECONDS * (2**attempt))
+        raise RateLimitedError(
+            f"Yahoo returned HTTP {last_status} after {self._MAX_RETRIES} attempts."
+        )
 
     def fetch_league_raw(self) -> dict[str, Any]:
         settings = self._call(self._league.settings)
@@ -225,19 +247,35 @@ class YahooFantasyApiDataSource:
     def fetch_player_details_raw(self, player_ids: list[int]) -> dict[str, dict[str, Any]]:
         if not player_ids:
             return {}
-        details = self._call(self._league.player_details, player_ids)
+
+        # Identity (name/positions/team) is immutable during a draft (R4) —
+        # only fetch what isn't already cached. percent_owned is NOT cached
+        # here (data-model.md: it's mutable ranking context, refetched fresh
+        # every call) — see below.
+        missing_ids = [pid for pid in player_ids if pid not in self._player_identity_cache]
+        if missing_ids:
+            details = self._call(self._league.player_details, missing_ids)
+            for p in details:
+                pid = int(p["player_id"])
+                self._player_identity_cache[pid] = {
+                    "player_id": pid,
+                    "name": _flatten_name(p["name"]),
+                    "eligible_positions": _flatten_positions(p["eligible_positions"]),
+                    "editorial_team_abbr": p.get("editorial_team_abbr", ""),
+                }
+
         ownership = {
             p["player_id"]: p["percent_owned"]
             for p in self._call(self._league.percent_owned, player_ids)
         }
+
         result: dict[str, dict[str, Any]] = {}
-        for p in details:
-            pid = int(p["player_id"])
+        for pid in player_ids:
+            identity = self._player_identity_cache.get(pid)
+            if identity is None:
+                continue
             result[str(pid)] = {
-                "player_id": pid,
-                "name": _flatten_name(p["name"]),
-                "eligible_positions": _flatten_positions(p["eligible_positions"]),
-                "editorial_team_abbr": p.get("editorial_team_abbr", ""),
+                **identity,
                 "percent_owned": ownership.get(pid),
                 # See class docstring: not available from this library.
                 "average_pick": None,

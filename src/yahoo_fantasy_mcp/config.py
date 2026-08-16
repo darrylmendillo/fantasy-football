@@ -12,6 +12,8 @@ from dataclasses import dataclass
 
 DEFAULT_POLL_INTERVAL_SECONDS = 5
 DEFAULT_TOKEN_PATH = "~/.yahoo_fantasy_mcp/oauth2.json"
+# Standard Yahoo NFL redraft league (starters + bench); override if yours differs.
+DEFAULT_ROSTER_SIZE = 16
 
 
 @dataclass(frozen=True)
@@ -21,6 +23,12 @@ class ServerConfig:
     league_key: str
     poll_interval_seconds: int
     token_path: str
+    # Roster spots per team, used only to compute total_expected_picks for
+    # the Draft.is_complete flag (draft.py). NOT used anywhere in the
+    # availability-derivation logic (FR-010/SC-002), which depends only on
+    # drafted_player_ids() and is correct regardless of this value. Getting
+    # this wrong makes is_complete wrong, not availability.
+    roster_size: int
 
 
 class MissingConfigError(RuntimeError):
@@ -51,10 +59,17 @@ def load_config() -> ServerConfig:
             "YAHOO_POLL_INTERVAL_SECONDS must be an integer number of seconds."
         ) from exc
 
+    roster_size_raw = os.environ.get("YAHOO_ROSTER_SIZE", str(DEFAULT_ROSTER_SIZE))
+    try:
+        roster_size = int(roster_size_raw)
+    except ValueError as exc:
+        raise MissingConfigError("YAHOO_ROSTER_SIZE must be an integer.") from exc
+
     return ServerConfig(
         client_id=_require_env("YAHOO_CLIENT_ID"),
         client_secret=_require_env("YAHOO_CLIENT_SECRET"),
         league_key=_require_env("YAHOO_LEAGUE_KEY"),
         poll_interval_seconds=poll_interval,
         token_path=os.path.expanduser(os.environ.get("YAHOO_TOKEN_PATH", DEFAULT_TOKEN_PATH)),
+        roster_size=roster_size,
     )

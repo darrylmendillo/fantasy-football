@@ -107,23 +107,23 @@ across calls (quickstart V3, V4).
 
 ### Tests for User Story 2 ⚠️ Write FIRST, observe FAILING
 
-- [ ] T029 [P] [US2] Write failing test in `tests/unit/test_draft.py` asserting pre-draft fixture returns `picks: []` and `draft_status: "predraft"` **without raising** (US2 scenario 3)
-- [ ] T030 [P] [US2] Write failing test in `tests/unit/test_draft.py` asserting mid-draft fixture returns only picks made so far, ordered by `pick` ascending (US2 scenario 1, FR-008)
-- [ ] T031 [P] [US2] Write failing test in `tests/unit/test_draft.py` asserting post-draft fixture returns complete board with `is_complete: true` (US2 scenario 2)
-- [ ] T032 [P] [US2] Write failing test in `tests/unit/test_draft.py` asserting every draft-bearing response carries a populated `retrieved_at` (FR-009, data-model.md)
-- [ ] T033 [P] [US2] Write failing test in `tests/unit/test_draft.py` asserting the auction fixture raises `UNSUPPORTED_DRAFT_TYPE` rather than parsing as snake (FR-013, data-model rule 1)
-- [ ] T034 [P] [US2] Write failing test in `tests/unit/test_draft.py` asserting duplicate `player_id` across picks is surfaced, not silently deduplicated (data-model rule 2)
+- [X] T029 [P] [US2] Write failing test in `tests/unit/test_draft.py` asserting pre-draft fixture returns `picks: []` and `draft_status: "predraft"` **without raising** (US2 scenario 3)
+- [X] T030 [P] [US2] Write failing test in `tests/unit/test_draft.py` asserting mid-draft fixture returns only picks made so far, ordered by `pick` ascending (US2 scenario 1, FR-008)
+- [X] T031 [P] [US2] Write failing test in `tests/unit/test_draft.py` asserting post-draft fixture returns complete board with `is_complete: true` (US2 scenario 2)
+- [X] T032 [P] [US2] Write failing test in `tests/unit/test_draft.py` asserting every draft-bearing response carries a populated `retrieved_at` (FR-009, data-model.md)
+- [X] T033 [P] [US2] Write failing test in `tests/unit/test_draft.py` asserting the auction fixture raises `UNSUPPORTED_DRAFT_TYPE` rather than parsing as snake (FR-013, data-model rule 1)
+- [X] T034 [P] [US2] Write failing test in `tests/unit/test_draft.py` asserting duplicate `player_id` across picks is surfaced, not silently deduplicated (data-model rule 2)
 
 ### Implementation for User Story 2
 
-- [ ] T035 [US2] Implement `Draft` snapshot construction with required `retrieved_at` in `src/yahoo_fantasy_mcp/draft.py`, passing T032
-- [ ] T036 [US2] Implement `draft_results()` parsing (pick, round, team_key, player_id) in `src/yahoo_fantasy_mcp/draft.py`, passing T029-T031 (research R2 — this endpoint is uncached, safe to poll)
-- [ ] T037 [US2] Implement auction-draft guard on the `cost` field in `src/yahoo_fantasy_mcp/draft.py`, passing T033 (FR-013)
-- [ ] T038 [US2] Implement duplicate-pick detection in `src/yahoo_fantasy_mcp/draft.py`, passing T034
-- [ ] T039 [US2] Implement process-lifetime player identity cache (id → name/positions/nfl_team) in `src/yahoo_fantasy_mcp/client.py` — safe because identity is immutable during a draft (research R4)
-- [ ] T040 [US2] Implement exponential backoff on throttle/5xx responses in `src/yahoo_fantasy_mcp/client.py`, emitting `RATE_LIMITED` (research R5)
-- [ ] T041 [US2] Implement `get_draft_results` tool in `src/yahoo_fantasy_mcp/server.py` — exactly **one** Yahoo call per invocation, names served from the T039 cache (research R5)
-- [ ] T042 [US2] Add contract test for `get_draft_results` response shape in `tests/integration/test_tools.py` per contracts/mcp-tools.md
+- [X] T035 [US2] Implement `Draft` snapshot construction with required `retrieved_at` in `src/yahoo_fantasy_mcp/draft.py`, passing T032
+- [X] T036 [US2] Implement `draft_results()` parsing (pick, round, team_key, player_id) in `src/yahoo_fantasy_mcp/draft.py`, passing T029-T031 (research R2 — this endpoint is uncached, safe to poll)
+- [X] T037 [US2] Implement auction-draft guard on the `cost` field in `src/yahoo_fantasy_mcp/draft.py`, passing T033 (FR-013)
+- [X] T038 [US2] Implement duplicate-pick detection in `src/yahoo_fantasy_mcp/draft.py`, passing T034
+- [X] T039 [US2] Implement process-lifetime player identity cache (id → name/positions/nfl_team) in `src/yahoo_fantasy_mcp/client.py` — safe because identity is immutable during a draft (research R4)
+- [X] T040 [US2] Implement exponential backoff on throttle/5xx responses in `src/yahoo_fantasy_mcp/client.py`, emitting `RATE_LIMITED` (research R5)
+- [X] T041 [US2] Implement `get_draft_results` tool in `src/yahoo_fantasy_mcp/server.py` — exactly **one** Yahoo call per invocation, names served from the T039 cache (research R5)
+- [X] T042 [US2] Add contract test for `get_draft_results` response shape in `tests/integration/test_tools.py` per contracts/mcp-tools.md
 
 **Checkpoint**: US1 and US2 both work independently — live draft picks are visible
 

@@ -9,11 +9,14 @@ from __future__ import annotations
 
 from yahoo_fantasy_mcp.client import YahooClient
 from yahoo_fantasy_mcp.server import (
+    tool_get_draft_results,
     tool_get_league_info,
     tool_get_roster,
     tool_get_standings,
     tool_list_teams,
 )
+
+TOTAL_EXPECTED_PICKS = 12  # matches the 4-team/3-round test league fixtures
 
 
 class TestGetLeagueInfo:
@@ -63,3 +66,30 @@ class TestGetStandings:
         result = tool_get_standings(client)
         assert [t["standing"] for t in result["standings"]] == [1, 2, 3, 4]
         assert result["standings"][0]["name"] == "Turf Wars"
+
+
+class TestGetDraftResults:
+    def test_predraft_is_empty_not_error(self, fixture_source):
+        fixture_source.draft_fixture = "draft_predraft.json"
+        client = YahooClient(fixture_source)
+        result = tool_get_draft_results(client, TOTAL_EXPECTED_PICKS)
+        assert result["picks"] == []
+        assert result["draft_status"] == "predraft"
+        assert result["is_complete"] is False
+
+    def test_midraft_includes_resolved_player_names(self, fixture_source):
+        fixture_source.draft_fixture = "draft_midraft.json"
+        client = YahooClient(fixture_source)
+        result = tool_get_draft_results(client, TOTAL_EXPECTED_PICKS)
+        assert len(result["picks"]) == 5
+        assert result["draft_status"] == "drafting"
+        assert result["picks"][0]["player_name"] == "Bijan Robinson"
+        assert result["retrieved_at"]  # non-empty ISO timestamp
+
+    def test_postdraft_is_complete(self, fixture_source):
+        fixture_source.draft_fixture = "draft_postdraft.json"
+        client = YahooClient(fixture_source)
+        result = tool_get_draft_results(client, TOTAL_EXPECTED_PICKS)
+        assert result["is_complete"] is True
+        assert result["draft_status"] == "postdraft"
+        assert len(result["picks"]) == 12

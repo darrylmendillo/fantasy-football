@@ -28,7 +28,15 @@ def build_context() -> ServerContext:
     my_team_key = league.team_key()
     data_source = YahooFantasyApiDataSource(league, my_team_key)
     client = YahooClient(data_source)
-    return ServerContext(client=client, token_provider=token_provider)
+
+    num_teams = client.get_league_info().num_teams
+    total_expected_picks = num_teams * config.roster_size
+
+    return ServerContext(
+        client=client,
+        token_provider=token_provider,
+        total_expected_picks=total_expected_picks,
+    )
 
 
 def main() -> None:
