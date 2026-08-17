@@ -1,6 +1,16 @@
 <!--
 Sync Impact Report
-Version change: 1.0.0 → 0.2.0 (pre-1.0 renumbering + product pivot)
+Version change: 0.2.0 → 0.3.0 (MINOR — two-tier validation added to Principle I)
+  Principle I gained a "Two tiers of done" clause: external approvals no
+  longer idle implementation. Work may proceed to *mock-validated* tier at
+  any time; *integration-validated* remains required before anything is
+  called done, working, or deployable. Added because Yahoo's API access
+  review is an indefinite external block, and the alternative — waiting —
+  costs weeks while teaching us nothing. The clause deliberately does NOT
+  relax what "done" means; it names a lower tier honestly instead of
+  letting mock-passing quietly masquerade as working.
+
+Prior change: 1.0.0 → 0.2.0 (pre-1.0 renumbering + product pivot)
 Rationale: the initial 1.0.0 ratification overstated maturity — this project
   is pre-release, nothing has shipped to real users, and the product
   direction is still in flux (as this very amendment demonstrates). The
@@ -37,8 +47,7 @@ Deferred TODOs: none
 ### I. MVP-First, Phased Delivery
 Build in proven, demonstrable phases: (1) a Yahoo Fantasy Sports MCP server
 (FastMCP-based, local, single-user) exposing read access, OAuth, and
-draft-pick visibility — proven end-to-end against a real Yahoo account
-before anything else is built on top of it; (2) evolve that into a hosted,
+draft-pick visibility; (2) evolve that into a hosted,
 multi-tenant Yahoo Fantasy MCP server — MCP-native OAuth (via an
 OAuth-proxy pattern in front of Yahoo's own OAuth2), multi-league,
 read **and** write (Yahoo Transactions/Roster resources, gated by a
@@ -51,6 +60,26 @@ layer on top of the tool primitives, and monetization/tiering) is
 acknowledged future direction only — not designed or built until Phase 2 is
 proven. Each phase MUST be independently working and verified before the
 next phase's spec is written. Do not build ahead of the proven need.
+
+**Two tiers of done (added v0.3.0).** External approvals outside our control
+(e.g. Yahoo's API access review) MUST NOT idle implementation. Work is
+therefore validated in two tiers, and the distinction MUST be stated
+explicitly wherever status is reported:
+
+- **Mock-validated** — logic implemented and passing against fakes, fixtures,
+  and protocol-level inspection. Implementation MAY proceed to this tier at
+  any time, including before external approvals land.
+- **Integration-validated** — the same code exercised against the real
+  external system with real credentials.
+
+A capability is **not "done," not "working," and not deployable** on
+mock-validation alone. Mocks encode *our assumptions* about a third-party
+interface; a passing mock proves our code is self-consistent, never that the
+external contract was understood correctly. Any interface shape not yet
+verified against the live system MUST be recorded as unverified (Principle
+IV) and MUST NOT be implemented against a guessed signature — verify first,
+then write. Phase N+1 may be built to mock-validated tier while Phase N
+awaits integration validation; neither ships until integration-validated.
 
 ### II. Test-First (NON-NEGOTIABLE)
 TDD is mandatory for all non-trivial logic: Yahoo API response parsing,
@@ -130,4 +159,4 @@ and update `Last Amended` below. Compliance with Principles I-V is checked
 at each `/speckit-implement` and `/speckit-converge` checkpoint; violations
 block moving to the next phase rather than being deferred.
 
-**Version**: 0.2.0 | **Ratified**: 2026-08-16 | **Last Amended**: 2026-08-17
+**Version**: 0.3.0 | **Ratified**: 2026-08-16 | **Last Amended**: 2026-08-17

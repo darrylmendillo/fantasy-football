@@ -25,14 +25,23 @@ Single project: `src/yahoo_fantasy_mcp/`, `tests/` at repository root.
 
 ---
 
-## ⚠️ RELEASE GATES — verify before starting Phase 3
+## ⚠️ RELEASE GATES — two tiers (constitution v0.3.0, Principle I)
 
-Neither gate is code work; both are hard blockers from constitution Principle I. Phases 1–2 may proceed regardless.
+Implementation proceeds to **mock-validated** tier now. **Integration-validated** tier is gated on external approval. Nothing is "done," "working," or deployable until integration-validated — a passing mock proves our code is self-consistent, never that Yahoo's contract was understood correctly.
 
-- [ ] **G1** Yahoo API Access Application approved for the operator's Client ID (<https://sports.yahoo.com/developer/access/>). **Read (`fspt-r`) unblocks US1/US2. Read+write (`fspt-w`) required for US3/US4/US5.**
-- [ ] **G2** Phase 1 (spec 001) validated end-to-end against a real Yahoo account — spec 001 task T055. Required by Principle I before *any* implementation of this feature.
+**Buildable now (mock-validated)** — no Yahoo approval required:
 
-**If G1 lands read-only**: implement through US2, stop, and run quickstart V9 (`WRITE_NOT_APPROVED` path) before write approval arrives — that state is unreproducible afterward.
+- Phases 1–2 in full; US1/US2 logic against fixtures; the entire confirm rail and its adversarial tests
+- Protocol-level verification via **MCP Inspector**: OAuth metadata discovery, DCR/PKCE endpoints, tool schemas, and the full annotation matrix
+- **Stop line for this pass**: T046 (`change_positions` dispatch). Its signature is unverified (research R5) and Principle I now forbids implementing against a guessed shape — verify against a real team first, then write
+
+**Gated on external approval (integration-validated)**:
+
+- [ ] **G1** Yahoo API Access Application approved for the operator's Client ID (<https://sports.yahoo.com/developer/access/>). **Read (`fspt-r`) unblocks live US1/US2 validation. Read+write (`fspt-w`) required for US3/US4/US5 dispatch.**
+- [ ] **G2** Phase 1 (spec 001) validated end-to-end against a real Yahoo account — spec 001 task T055.
+- [ ] **G3** Live verification of unverified interface shapes from research R5/R1/R3 — `change_positions` `time_frame`/`modified_lineup`, Yahoo userinfo response, `openid`+`fspt-w` co-request behavior. **Blocks T046 specifically.**
+
+**Time-sensitive**: run quickstart **V9** (`WRITE_NOT_APPROVED` path) *before* write approval lands — that state is unreproducible afterward.
 
 ---
 
@@ -147,7 +156,7 @@ Neither gate is code work; both are hard blockers from constitution Principle I.
 - [ ] T043 [US3] Implement `verify_and_consume()` in `src/yahoo_fantasy_mcp/confirm.py` — enforces the six checks from data-model.md atomically; returns `INVALID_CONFIRMATION` identically for unknown-token and wrong-user (contracts: must not reveal token existence)
 - [ ] T044 [US3] Implement precondition re-verification for `set_lineup` in `src/yahoo_fantasy_mcp/confirm.py` — compares current roster/slots against the snapshot
 - [ ] T045 [US3] Implement `propose_set_lineup` in `src/yahoo_fantasy_mcp/tools_write.py` per contracts, including `warnings` (e.g. bye week) surfaced pre-confirmation
-- [ ] T046 [US3] Add `set_lineup` write dispatch in `src/yahoo_fantasy_mcp/client.py` via `Team.change_positions` — **verify `time_frame`/`modified_lineup` shape against a real team first** (research R5 flags this unverified)
+- [ ] T046 [US3] 🚧 **BLOCKED ON G3 — do not implement in the mock-validated pass.** Add `set_lineup` write dispatch in `src/yahoo_fantasy_mcp/client.py` via `Team.change_positions`. The `time_frame`/`modified_lineup` shape is unverified (research R5); constitution Principle I forbids implementing against a guessed signature. Verify against a real team, then write. Until then `confirm_action` dispatches through a seam that raises `WRITE_NOT_APPROVED`
 - [ ] T047 [US3] Implement `confirm_action` in `src/yahoo_fantasy_mcp/tools_write.py` — the single write path; annotated `destructiveHint=true`
 - [ ] T048 [US3] Implement `WRITE_NOT_APPROVED` handling in `src/yahoo_fantasy_mcp/tools_write.py` — distinguishes missing Yahoo write scope from an invalid request (FR-025)
 
