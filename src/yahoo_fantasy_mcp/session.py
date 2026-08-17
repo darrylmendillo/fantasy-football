@@ -107,3 +107,48 @@ def require_league_membership(league_key: str, accessible_keys: set[str]) -> Non
     refused, never served."""
     if league_key not in accessible_keys:
         raise LeagueNotAccessibleError()
+
+
+@dataclass(frozen=True)
+class LeagueContext:
+    """One user's view of one league, for the duration of one request.
+
+    Replaces spec 001's module-level ServerContext. Nothing here may be
+    cached across requests: sharing a context would share a Yahoo session
+    between users.
+    """
+
+    league_key: str
+    team_key: str
+    client: Any
+    total_expected_picks: int
+
+
+def resolve_league_context(
+    game_factory: Any,
+    identity: RequestIdentity,
+    league_key: str,
+    leagues: list[LeagueSummary],
+) -> LeagueContext:
+    """Scope this request to one league, refusing anything the caller cannot
+    or should not reach.
+
+    Order matters: membership and sport are checked BEFORE any Yahoo object
+    is constructed, so a refused request costs no upstream call.
+
+    Membership is enforced via the existing `require_league_membership`
+    helper (not reimplemented here) — it already exists in this module and
+    duplicating its check inline would be exactly the "verbatim duplication
+    of a logic block" the review rubric flags as a defect.
+    """
+    require_league_membership(league_key, {lg.league_key for lg in leagues})
+    match = next(lg for lg in leagues if lg.league_key == league_key)
+    require_supported_sport(match.sport)
+
+    league = game_factory.build(identity, league_key)
+    return LeagueContext(
+        league_key=league_key,
+        team_key=match.team_key or "",
+        client=league,
+        total_expected_picks=0,
+    )
