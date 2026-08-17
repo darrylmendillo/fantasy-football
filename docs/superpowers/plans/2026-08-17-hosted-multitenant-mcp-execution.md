@@ -497,10 +497,14 @@ def resolve_league_context(
 
     Order matters: membership and sport are checked BEFORE any Yahoo object
     is constructed, so a refused request costs no upstream call.
+
+    Membership is enforced via the existing `require_league_membership`
+    helper (not reimplemented here) — it already exists in this module and
+    duplicating its check inline would be exactly the "verbatim duplication
+    of a logic block" the review rubric flags as a defect.
     """
-    match = next((lg for lg in leagues if lg.league_key == league_key), None)
-    if match is None:
-        raise LeagueNotAccessibleError()
+    require_league_membership(league_key, {lg.league_key for lg in leagues})
+    match = next(lg for lg in leagues if lg.league_key == league_key)
     require_supported_sport(match.sport)
 
     league = game_factory.build(identity, league_key)
