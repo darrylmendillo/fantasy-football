@@ -12,9 +12,15 @@ automated tests, not a substitute for them.
 
 - Python 3.11+ (`fastmcp` requires ≥3.10; repo targets 3.11).
 - A Yahoo account that is a member of the target fantasy football league.
-- A Yahoo Developer app (Client ID + Client Secret) with Fantasy Sports
-  **read** permission. Read-only is sufficient and intentional — the server
-  never writes (FR-014), so do not grant write scope.
+- A Yahoo Developer app (Client ID + Client Secret) — create at
+  https://developer.yahoo.com/apps/.
+- An **approved Fantasy Sports API Access Application** for that Client ID,
+  submitted at https://sports.yahoo.com/developer/access/ (Read access;
+  Yahoo now gates Fantasy Sports data behind this separate application/review
+  step, not just app creation — without it, calls fail with
+  `oauth_problem="additional_authorization_required"` even with a valid
+  token). Read-only is sufficient and intentional — the server never writes
+  (FR-014), so do not request write scope.
 - The league key for the single league in scope (FR-012), e.g. `449.l.27081`.
 
 ## Setup
@@ -27,13 +33,18 @@ uv sync            # or: pip install -e .
 cp .env.example .env
 $EDITOR .env       # set YAHOO_CLIENT_ID, YAHOO_CLIENT_SECRET, YAHOO_LEAGUE_KEY
 
-# 3. One-time OAuth consent (FR-001)
-uv run python -m yahoo_fantasy_mcp.auth login
+# 3. One-time OAuth consent (FR-001) — happens automatically on first server start
+uv run python -m yahoo_fantasy_mcp
 ```
 
-Step 3 opens Yahoo's consent page once and writes a token file to a **gitignored**
-path. After this, refresh is automatic (FR-003) — you should not need to log in
-again.
+There is no separate `auth login` subcommand. Step 3 starts the MCP server,
+which calls `auth.login()` (`src/yahoo_fantasy_mcp/__main__.py:build_context()`)
+before it starts serving tools: this opens Yahoo's consent page once (or, in a
+headless environment like Codespaces, prints a URL and prompts for a pasted
+verifier code) and writes a token file to a **gitignored** path. After this,
+refresh is automatic (FR-003) — you should not need to log in again, and
+subsequent `uv run python -m yahoo_fantasy_mcp` starts (including via
+`claude mcp add`, below) reuse the saved token silently.
 
 **Verify nothing secret is tracked** before any commit:
 

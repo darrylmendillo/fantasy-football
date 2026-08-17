@@ -11,6 +11,7 @@ venv/
 # Env / secrets
 .env
 .env.*
+!.env.example
 *.token
 oauth2.json
 .yahoo_token.json

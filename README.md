@@ -34,7 +34,7 @@ Edit `.env`:
 
 | Variable | What it is |
 |---|---|
-| `YAHOO_CLIENT_ID` / `YAHOO_CLIENT_SECRET` | From a Yahoo Developer app with Fantasy Sports **read** permission — https://developer.yahoo.com/apps/. Do not grant write scope; this server doesn't need or use it. |
+| `YAHOO_CLIENT_ID` / `YAHOO_CLIENT_SECRET` | From a Yahoo Developer app — https://developer.yahoo.com/apps/. You also need an **approved Fantasy Sports API Access Application** for that Client ID at https://sports.yahoo.com/developer/access/ (a separate review step from app creation; no published turnaround time). Without it, calls fail with `additional_authorization_required` even with a valid token. Request Read only; this server doesn't need or use write scope. |
 | `YAHOO_LEAGUE_KEY` | The single league this server serves, e.g. `449.l.99001`. |
 | `YAHOO_POLL_INTERVAL_SECONDS` | How often to poll during a live draft. Default `5`. |
 | `YAHOO_ROSTER_SIZE` | Roster spots per team in your league. Only affects the `is_complete` flag on draft results, not correctness of who's available. Default `16`. |
