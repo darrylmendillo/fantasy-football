@@ -289,7 +289,7 @@ def test_proxy_targets_yahoo_endpoints():
 
 def test_configured_scope_is_advertised():
     proxy = build_auth_proxy(_config(yahoo_scope="fspt-r"))
-    assert "fspt-r" in proxy._valid_scopes
+    assert "fspt-r" in proxy.client_registration_options.valid_scopes
 
 
 def test_client_secret_never_appears_in_repr():
@@ -797,6 +797,27 @@ Port the bodies from `server.py`'s existing `tool_*` functions unchanged — onl
 
 - [ ] **Step 1: Write the failing test**
 
+Add this fixture to `tests/conftest.py` first (append, do not overwrite —
+same file `fixture_source` already lives in). This sidesteps the `from
+tests.conftest import ...` collision documented in Global Constraints:
+confirmed by direct test in this repo — any top-level `from tests.conftest
+import X` triggers site-packages' `yahoo_oauth`-installed `tests` package to
+load first and fails collection with `ImportError: cannot import name
+'OAuth1' from 'yahoo_oauth'`, regardless of which name is imported.
+
+```python
+@pytest.fixture
+def fixture_client():
+    """Factory: fixture_client(draft_fixture="draft_midraft.json") -> YahooClient."""
+
+    def _make(draft_fixture: str = "draft_midraft.json") -> Any:
+        from yahoo_fantasy_mcp.client import YahooClient
+
+        return YahooClient(FixtureDataSource(draft_fixture=draft_fixture))
+
+    return _make
+```
+
 ```python
 # tests/integration/test_us2_reads.py
 """Task 6 — US2: reads work against any league, selected per call.
@@ -808,7 +829,6 @@ thing to break silently during a refactor.
 
 from __future__ import annotations
 
-from yahoo_fantasy_mcp.client import YahooClient
 from yahoo_fantasy_mcp.tools_read import (
     tool_get_available_players,
     tool_get_draft_results,
@@ -817,58 +837,48 @@ from yahoo_fantasy_mcp.tools_read import (
     tool_list_teams,
 )
 
-from tests.conftest import FixtureDataSource  # noqa: F401  (see note below)
 
-
-def _client(draft_fixture: str = "draft_midraft.json") -> YahooClient:
-    from tests.conftest import FixtureDataSource
-
-    return YahooClient(FixtureDataSource(draft_fixture=draft_fixture))
-
-
-def test_league_info_returns_identity_fields():
-    info = tool_get_league_info(_client())
+def test_league_info_returns_identity_fields(fixture_client):
+    info = tool_get_league_info(fixture_client())
     assert info["league_key"] == "449.l.99001"
     assert info["name"] == "Sunday Funday"
 
 
-def test_list_teams_flags_the_callers_own_team():
-    teams = tool_list_teams(_client())
+def test_list_teams_flags_the_callers_own_team(fixture_client):
+    teams = tool_list_teams(fixture_client())
     assert any(t["is_owned_by_user"] for t in teams)
 
 
-def test_standings_are_ranked():
-    standings = tool_get_standings(_client())
+def test_standings_are_ranked(fixture_client):
+    standings = tool_get_standings(fixture_client())
     assert [t["standing"] for t in standings] == sorted(t["standing"] for t in standings)
 
 
-def test_availability_and_drafted_never_overlap_midraft():
+def test_availability_and_drafted_never_overlap_midraft(fixture_client):
     """FR-012. If this fails, the product's central promise is broken."""
-    client = _client("draft_midraft.json")
+    client = fixture_client("draft_midraft.json")
     drafted = {p["player_id"] for p in tool_get_draft_results(client, 64)["picks"]}
     available = {p["player_id"] for p in tool_get_available_players(client, 64)["players"]}
     assert drafted & available == set()
 
 
-def test_availability_invariant_holds_deep_into_draft():
+def test_availability_invariant_holds_deep_into_draft(fixture_client):
     """Late-draft is where a regression to cached availability surfaces.
 
     draft_postdraft.json is the latest-stage fixture in the repo (verified:
     tests/fixtures/ holds predraft, midraft, postdraft, auction only — there
     is no draft_late.json).
     """
-    client = _client("draft_postdraft.json")
+    client = fixture_client("draft_postdraft.json")
     drafted = {p["player_id"] for p in tool_get_draft_results(client, 64)["picks"]}
     available = {p["player_id"] for p in tool_get_available_players(client, 64)["players"]}
     assert drafted & available == set()
 ```
 
-> **Note:** if `from tests.conftest import FixtureDataSource` fails due to the
-> site-packages `tests` shadowing, add a `fixture_client` fixture to
-> `tests/conftest.py` returning `YahooClient(FixtureDataSource(...))` and take
-> it as a test parameter instead. Do not vendor a second copy of the fixture.
-> Available fixtures (verified): `draft_predraft.json`, `draft_midraft.json`,
-> `draft_postdraft.json`, `draft_auction.json`.
+**Verified in this repo** (not hypothetical): a probe test using the
+top-level-import form was run against the actual worktree and failed
+collection with exactly the `OAuth1` ImportError above. The `fixture_client`
+form is the fix, not a fallback.
 
 - [ ] **Step 2: Run test to verify it fails**
 
