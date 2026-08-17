@@ -13,11 +13,16 @@ through FastMCP's JSON-RPC framing.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastmcp import FastMCP
 
 from yahoo_fantasy_mcp.client import YahooClient
 from yahoo_fantasy_mcp.draft import build_draft_snapshot
 from yahoo_fantasy_mcp.errors import YahooFantasyError
+from yahoo_fantasy_mcp.logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 mcp = FastMCP("yahoo-fantasy-mcp")
 
@@ -269,3 +274,15 @@ def register_tools(mcp_server: FastMCP, ctx: ServerContext) -> None:
     @_guarded
     def get_available_players(position: str | None = None, limit: int = 50) -> dict:
         return tool_get_available_players(ctx.client, ctx.total_expected_picks, position, limit)
+
+
+def record_tool_usage(store: Any, sub: str, tool_name: str, outcome: str) -> None:
+    """Record one tool invocation (FR-028).
+
+    Deliberately takes no arguments payload — see data-model.md. Never raises:
+    a metering failure must not break a user's request.
+    """
+    try:
+        store.record_usage(sub, tool_name, outcome)
+    except Exception:  # noqa: BLE001 - metering is best-effort by design
+        logger.warning("failed to record usage for tool %s", tool_name)
