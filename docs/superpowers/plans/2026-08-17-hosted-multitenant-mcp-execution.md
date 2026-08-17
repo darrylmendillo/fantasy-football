@@ -1584,7 +1584,7 @@ def tools():
     server = build_server(Store(":memory:"), config)
     import anyio
 
-    return {t.name: t for t in anyio.run(server.get_tools)}
+    return {t.name: t for t in anyio.run(server.list_tools)}
 
 
 def test_every_tool_declares_all_three_hints(tools):
@@ -1646,14 +1646,15 @@ def propose_set_lineup(...): ...
 
 Keep `register_tools(mcp_server, store, config)` as a thin wrapper over the same registration body so `__main__.py` (Task 4) works unchanged. Wrap every tool so it records usage (`record_tool_usage`) and translates `YahooFantasyError` into `exc.to_dict()`, preserving spec 001's `_guarded` behaviour.
 
-**API shape already verified** (FastMCP 3.4.7): `FastMCP.tool` accepts
-`annotations: ToolAnnotations | dict[str, Any] | None`, so both the object
-above and a plain dict work. No guesswork needed.
-
-If `server.get_tools` turns out not to be the accessor for registered tools in
-this version, discover the correct one before adapting the test —
-`.venv/bin/python -c "from fastmcp import FastMCP; print([m for m in dir(FastMCP) if 'tool' in m.lower()])"`
-— and change how the test *reads* the tools, never what it asserts about them.
+**Both API shapes already verified against installed FastMCP 3.4.7:**
+`FastMCP.tool` accepts `annotations: ToolAnnotations | dict[str, Any] |
+None` (a plain dict works — confirmed live: registered a tool with
+`annotations={'readOnlyHint': True, ...}` and read back
+`tool.annotations.readOnlyHint is True`). Listing registered tools is
+`async def list_tools(self, *, run_middleware=True) -> Sequence[Tool]` —
+**not** `get_tools`, which does not exist on `FastMCP` at all
+(`AttributeError`, confirmed live). The test above already uses
+`anyio.run(server.list_tools)`. No further discovery needed.
 
 - [ ] **Step 4: Run test to verify it passes**
 
