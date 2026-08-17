@@ -62,18 +62,20 @@ def tool_get_league_info(client: YahooClient) -> dict:
     }
 
 
-def tool_list_teams(client: YahooClient) -> list[dict]:
+def tool_list_teams(client: YahooClient) -> dict:
     """Teams in the league, flagging the authenticated user's own team."""
     teams = client.get_teams()
-    return [
-        {
-            "team_key": t.team_key,
-            "name": t.name,
-            "is_owned_by_user": t.is_owned_by_user,
-            "standing": t.standing,
-        }
-        for t in teams
-    ]
+    return {
+        "teams": [
+            {
+                "team_key": t.team_key,
+                "name": t.name,
+                "is_owned_by_user": t.is_owned_by_user,
+                "standing": t.standing,
+            }
+            for t in teams
+        ]
+    }
 
 
 def tool_get_roster(client: YahooClient, team_key: str | None) -> dict:
@@ -100,12 +102,14 @@ def tool_get_roster(client: YahooClient, team_key: str | None) -> dict:
     }
 
 
-def tool_get_standings(client: YahooClient) -> list[dict]:
+def tool_get_standings(client: YahooClient) -> dict:
     """Current league standings."""
     standings = client.get_standings()
-    return [
-        {"team_key": t.team_key, "name": t.name, "standing": t.standing} for t in standings
-    ]
+    return {
+        "standings": [
+            {"team_key": t.team_key, "name": t.name, "standing": t.standing} for t in standings
+        ]
+    }
 
 
 def tool_get_draft_results(client: YahooClient, total_expected_picks: int) -> dict:

@@ -23,12 +23,13 @@ def test_league_info_returns_identity_fields(fixture_client):
 
 
 def test_list_teams_flags_the_callers_own_team(fixture_client):
-    teams = tool_list_teams(fixture_client())
-    assert any(t["is_owned_by_user"] for t in teams)
+    result = tool_list_teams(fixture_client())
+    assert any(t["is_owned_by_user"] for t in result["teams"])
 
 
 def test_standings_are_ranked(fixture_client):
-    standings = tool_get_standings(fixture_client())
+    result = tool_get_standings(fixture_client())
+    standings = result["standings"]
     assert [t["standing"] for t in standings] == sorted(t["standing"] for t in standings)
 
 
