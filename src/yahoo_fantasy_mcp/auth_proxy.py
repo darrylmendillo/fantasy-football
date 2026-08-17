@@ -66,10 +66,12 @@ class YahooTokenVerifier(TokenVerifier):
             logger.debug("Yahoo userinfo returned no sub; rejecting token")
             return None
 
+        # Yahoo's userinfo endpoint exposes no granted-scope info; access gating
+        # happens at the tool layer via config.write_enabled, not MCP-level scopes.
         return AccessToken(
             token=token,
             client_id=str(sub),
-            scopes=list(self.required_scopes or []),
+            scopes=[],
             expires_at=None,
             claims={"sub": str(sub)},
         )

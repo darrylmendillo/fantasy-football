@@ -64,6 +64,21 @@ async def test_network_failure_returns_none_not_exception():
 
 
 @pytest.mark.anyio
-async def test_token_value_never_appears_in_repr():
-    verifier = YahooTokenVerifier()
-    assert "secret" not in repr(verifier)
+async def test_verification_never_logs_the_raw_token(caplog):
+    """Verify that token values never leak into logs during verification.
+
+    This ensures compliance with Principle III (no credentials in logs) and
+    catches regressions like naively adding logger.debug(f"verifying {token}").
+    """
+    import logging
+    caplog.set_level(logging.DEBUG)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"sub": "GUID123", "name": "Test User"})
+
+    verifier = YahooTokenVerifier(http_client=_client(handler))
+    token = "secret-test-token-12345"
+    await verifier.verify_token(token)
+
+    # Assert the token never appears in any captured log message
+    assert token not in caplog.text
