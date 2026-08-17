@@ -320,6 +320,22 @@ def build_auth_proxy(config: ServerConfig) -> OAuthProxy:
     exactly the case `OAuthProxy` exists for (research R1/R2). Consent is
     left at its default (always shown) — this server can write to a user's
     team, so silently re-approving is the wrong trade.
+
+    `YahooTokenVerifier` is deliberately constructed with NO `required_scopes`
+    (ruling recorded in the SDD ledger, Task 1 review, Finding A). Passing
+    `required_scopes` here would propagate to `OAuthProxy.required_scopes`
+    (`proxy.py:403`) and from there into `RequireAuthMiddleware`, which the
+    fastmcp HTTP transport mounts on every route (`fastmcp/server/http.py`)
+    to gate requests on `required_scope in auth_credentials.scopes`. Yahoo's
+    userinfo endpoint exposes no granted-scope information, so the verifier
+    cannot honestly report a token's real scope — Task 1's `verify_token`
+    returns `scopes=[]` for exactly this reason. Configuring a non-empty
+    `required_scopes` against a verifier that always returns `[]` would
+    reject every single authenticated request. `valid_scopes` below is a
+    different, legitimate mechanism (what scope MCP clients request during
+    OAuth consent/DCR) and is unaffected by this. Real write-vs-read gating
+    lives at the tool layer (FR-025, `config.write_enabled` /
+    `WriteNotApprovedError`), not via MCP protocol-level scope enforcement.
     """
     scopes = [s for s in config.yahoo_scope.split() if s]
     return OAuthProxy(
@@ -327,7 +343,7 @@ def build_auth_proxy(config: ServerConfig) -> OAuthProxy:
         upstream_token_endpoint=YAHOO_TOKEN_URL,
         upstream_client_id=config.client_id,
         upstream_client_secret=config.client_secret,
-        token_verifier=YahooTokenVerifier(required_scopes=scopes),
+        token_verifier=YahooTokenVerifier(),
         base_url=config.public_base_url,
         valid_scopes=scopes,
         # Yahoo supports PKCE; forwarding it is strictly safer.
