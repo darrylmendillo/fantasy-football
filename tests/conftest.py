@@ -136,3 +136,9 @@ def sub_a() -> str:
 @pytest.fixture
 def sub_b() -> str:
     return SUB_B
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    """Run @pytest.mark.anyio tests on asyncio only."""
+    return "asyncio"
