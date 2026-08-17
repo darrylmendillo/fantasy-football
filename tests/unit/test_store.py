@@ -115,3 +115,20 @@ class TestProposalLifecycle:
         store.insert_proposal(_proposal())
         with pytest.raises(sqlite3.IntegrityError):
             store.insert_proposal(_proposal(id="prop-2"))
+
+    def test_mark_status_does_not_overwrite_a_consumed_row(
+        self, store: Store, sub_a: str, sub_b: str
+    ) -> None:
+        """A racing confirm that already won must not have its outcome erased
+        by a losing thread deciding the proposal was 'expired' or 'failed'.
+        mark_status must guard on status = 'pending' just like mark_consumed,
+        or the persisted status can silently lie about what actually
+        happened (audit-trail integrity, not the confirm guarantee itself)."""
+        store.insert_proposal(_proposal())
+        assert store.mark_consumed("prop-1", now=1200) is True
+
+        store.mark_status("prop-1", "expired")
+
+        got = store.get_proposal_by_hash("hash-1")
+        assert got.status == "consumed"
+        assert got.consumed_at == 1200

@@ -184,6 +184,20 @@ class Store:
         self._conn.commit()
         return cur.rowcount == 1
 
-    def mark_status(self, proposal_id: str, status: str) -> None:
-        self._conn.execute("UPDATE proposals SET status = ? WHERE id = ?", (status, proposal_id))
+    def mark_status(self, proposal_id: str, status: str) -> bool:
+        """Transition a pending proposal to a terminal status (e.g. 'expired',
+        'failed').
+
+        Guarded the same way as ``mark_consumed``: only a row still in
+        'pending' is transitioned. Without this, a losing thread in a race
+        against ``mark_consumed`` could unconditionally overwrite a row that
+        another thread just consumed, corrupting the audit trail even though
+        the write-authorization gate (``mark_consumed``'s own guard) is
+        unaffected either way.
+        """
+        cur = self._conn.execute(
+            "UPDATE proposals SET status = ? WHERE id = ? AND status = 'pending'",
+            (status, proposal_id),
+        )
         self._conn.commit()
+        return cur.rowcount == 1
