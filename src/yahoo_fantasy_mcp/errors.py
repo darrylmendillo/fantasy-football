@@ -20,6 +20,14 @@ class ErrorCode(enum.Enum):
     UNSUPPORTED_DRAFT_TYPE = "UNSUPPORTED_DRAFT_TYPE"
     RATE_LIMITED = "RATE_LIMITED"
     UPSTREAM_ERROR = "UPSTREAM_ERROR"
+    # --- spec 002 additions (contracts/mcp-tools.md) ---
+    SPORT_NOT_SUPPORTED = "SPORT_NOT_SUPPORTED"
+    WRITE_NOT_APPROVED = "WRITE_NOT_APPROVED"
+    INVALID_CONFIRMATION = "INVALID_CONFIRMATION"
+    PROPOSAL_EXPIRED = "PROPOSAL_EXPIRED"
+    PROPOSAL_ALREADY_USED = "PROPOSAL_ALREADY_USED"
+    PRECONDITIONS_CHANGED = "PRECONDITIONS_CHANGED"
+    TRADE_INITIATION_NOT_SUPPORTED = "TRADE_INITIATION_NOT_SUPPORTED"
 
 
 class YahooFantasyError(Exception):
@@ -88,3 +96,87 @@ class RateLimitedError(YahooFantasyError):
 class UpstreamError(YahooFantasyError):
     def __init__(self, message: str = "Yahoo returned an unexpected error.") -> None:
         super().__init__(ErrorCode.UPSTREAM_ERROR, message)
+
+
+# --------------------------------------------------------------------------
+# spec 002 additions. See contracts/mcp-tools.md for the full error table.
+# --------------------------------------------------------------------------
+
+
+class SportNotSupportedError(YahooFantasyError):
+    def __init__(
+        self,
+        message: str = "This server currently supports fantasy football only.",
+    ) -> None:
+        super().__init__(ErrorCode.SPORT_NOT_SUPPORTED, message)
+
+
+class WriteNotApprovedError(YahooFantasyError):
+    """Raised when Yahoo has not granted this deployment write access (FR-025).
+
+    Deliberately distinct from a validation error: the user's request was
+    fine, the product simply cannot write yet.
+    """
+
+    def __init__(
+        self,
+        message: str = (
+            "This server does not yet have Yahoo write access approved, so no changes "
+            "can be made. Reading your league data still works."
+        ),
+    ) -> None:
+        super().__init__(ErrorCode.WRITE_NOT_APPROVED, message)
+
+
+class InvalidConfirmationError(YahooFantasyError):
+    """Unknown token OR wrong user — deliberately indistinguishable.
+
+    contracts/mcp-tools.md: the response must not reveal whether a given
+    confirmation token exists.
+    """
+
+    def __init__(
+        self,
+        message: str = "That confirmation is not valid. Start the action again to get a new one.",
+    ) -> None:
+        super().__init__(ErrorCode.INVALID_CONFIRMATION, message)
+
+
+class ProposalExpiredError(YahooFantasyError):
+    def __init__(
+        self,
+        message: str = "That confirmation has expired. Start the action again.",
+    ) -> None:
+        super().__init__(ErrorCode.PROPOSAL_EXPIRED, message)
+
+
+class ProposalAlreadyUsedError(YahooFantasyError):
+    def __init__(
+        self,
+        message: str = "That confirmation was already used. Start the action again.",
+    ) -> None:
+        super().__init__(ErrorCode.PROPOSAL_ALREADY_USED, message)
+
+
+class PreconditionsChangedError(YahooFantasyError):
+    """The world moved between propose and confirm (FR-021)."""
+
+    def __init__(
+        self,
+        message: str = (
+            "The situation changed since this was proposed, so it was not applied. "
+            "Review the current state and start again."
+        ),
+    ) -> None:
+        super().__init__(ErrorCode.PRECONDITIONS_CHANGED, message)
+
+
+class TradeInitiationNotSupportedError(YahooFantasyError):
+    def __init__(
+        self,
+        message: str = (
+            "Sending new trade offers is not supported yet. You can review, accept, "
+            "and reject offers other managers send you."
+        ),
+    ) -> None:
+        super().__init__(ErrorCode.TRADE_INITIATION_NOT_SUPPORTED, message)

@@ -49,10 +49,10 @@ Implementation proceeds to **mock-validated** tier now. **Integration-validated*
 
 **Purpose**: Dependency and skeleton changes needed by everything downstream.
 
-- [ ] T001 Update `pyproject.toml`: add `requests`, confirm `fastmcp>=3.4.7`, and move `yahoo_oauth` to an optional/local-only extra (research R6 removes it from the hosted path)
-- [ ] T002 [P] Create empty modules with docstrings only: `src/yahoo_fantasy_mcp/auth_proxy.py`, `session.py`, `store.py`, `confirm.py`, `tools_read.py`, `tools_write.py`
-- [ ] T003 [P] Rewrite `.env.example`: remove `YAHOO_LEAGUE_KEY`; add `PUBLIC_BASE_URL`, `PORT`, `DB_PATH`, `PROPOSAL_TTL_SECONDS`, `YAHOO_SCOPE`
-- [ ] T004 [P] Add shared test helpers in `tests/conftest.py`: fake clock, in-memory store factory, and two fake identities (`sub_a`, `sub_b`) for isolation tests
+- [X] T001 Update `pyproject.toml`: add `requests`, confirm `fastmcp>=3.4.7`, and move `yahoo_oauth` to an optional/local-only extra (research R6 removes it from the hosted path)
+- [X] T002 [P] Create empty modules with docstrings only: `src/yahoo_fantasy_mcp/auth_proxy.py`, `session.py`, `store.py`, `confirm.py`, `tools_read.py`, `tools_write.py`
+- [X] T003 [P] Rewrite `.env.example`: remove `YAHOO_LEAGUE_KEY`; add `PUBLIC_BASE_URL`, `PORT`, `DB_PATH`, `PROPOSAL_TTL_SECONDS`, `YAHOO_SCOPE`
+- [X] T004 [P] Add shared test helpers in `tests/conftest.py`: fake clock, in-memory store factory, and two fake identities (`sub_a`, `sub_b`) for isolation tests
 
 ---
 
@@ -64,22 +64,22 @@ Implementation proceeds to **mock-validated** tier now. **Integration-validated*
 
 ### Tests first
 
-- [ ] T005 [P] Unit tests for server config in `tests/unit/test_config.py` — asserts no per-user/league fields, required vars named in errors, no secret values in messages
-- [ ] T006 [P] Unit tests for `store.py` in `tests/unit/test_store.py` — user upsert idempotency, usage append, proposal lifecycle per data-model.md state machine
-- [ ] T007 [P] Unit tests for the Yahoo session adapter in `tests/unit/test_session_adapter.py` — asserts `.session` carries the Bearer header AND that the adapter has **no** `refresh_access_token` attribute (research R6: prevents double-refresh races)
-- [ ] T008 [P] Unit tests for per-user cache isolation in `tests/unit/test_client_cache_isolation.py` — two leagues/users must not share cached player identity or universe entries
+- [X] T005 [P] Unit tests for server config in `tests/unit/test_config.py` — asserts no per-user/league fields, required vars named in errors, no secret values in messages
+- [X] T006 [P] Unit tests for `store.py` in `tests/unit/test_store.py` — user upsert idempotency, usage append, proposal lifecycle per data-model.md state machine
+- [X] T007 [P] Unit tests for the Yahoo session adapter in `tests/unit/test_session_adapter.py` — asserts `.session` carries the Bearer header AND that the adapter has **no** `refresh_access_token` attribute (research R6: prevents double-refresh races)
+- [X] T008 [P] Unit tests for per-user cache isolation in `tests/unit/test_client_cache_isolation.py` — two leagues/users must not share cached player identity or universe entries
 
 ### Implementation
 
-- [ ] T009 Rewrite `src/yahoo_fantasy_mcp/config.py`: server-level `ServerConfig` only (base URL, port, client id/secret, db path, proposal TTL, scope); delete `league_key` and `token_path`
-- [ ] T010 Implement SQLite schema and accessors in `src/yahoo_fantasy_mcp/store.py` per data-model.md — `users`, `usage_events`, `proposals` tables with indices on `token_hash` and `sub`
-- [ ] T011 [P] Implement `YahooSessionAdapter` in `src/yahoo_fantasy_mcp/session.py` — wraps a `requests.Session` with `Authorization: Bearer <token>`; deliberately omits `refresh_access_token`
-- [ ] T012 [P] Extend `src/yahoo_fantasy_mcp/errors.py` with the contract's error codes: `LeagueNotAccessibleError`, `SportNotSupportedError`, `WriteNotApprovedError`, `InvalidConfirmationError`, `ProposalExpiredError`, `ProposalAlreadyUsedError`, `PreconditionsChangedError`, `TradeInitiationNotSupportedError`
+- [X] T009 Rewrite `src/yahoo_fantasy_mcp/config.py`: server-level `ServerConfig` only (base URL, port, client id/secret, db path, proposal TTL, scope); delete `league_key` and `token_path`
+- [X] T010 Implement SQLite schema and accessors in `src/yahoo_fantasy_mcp/store.py` per data-model.md — `users`, `usage_events`, `proposals` tables with indices on `token_hash` and `sub`
+- [X] T011 [P] Implement `YahooSessionAdapter` in `src/yahoo_fantasy_mcp/session.py` — wraps a `requests.Session` with `Authorization: Bearer <token>`; deliberately omits `refresh_access_token`
+- [X] T012 [P] Extend `src/yahoo_fantasy_mcp/errors.py` with the contract's error codes: `LeagueNotAccessibleError`, `SportNotSupportedError`, `WriteNotApprovedError`, `InvalidConfirmationError`, `ProposalExpiredError`, `ProposalAlreadyUsedError`, `PreconditionsChangedError`, `TradeInitiationNotSupportedError`
 - [ ] T013 Implement `YahooTokenVerifier` in `src/yahoo_fantasy_mcp/auth_proxy.py` — validates the opaque Yahoo token via userinfo and returns `sub` (research R3/R4), modeled on FastMCP's `GitHubTokenVerifier`
 - [ ] T014 Implement `build_auth_proxy()` in `src/yahoo_fantasy_mcp/auth_proxy.py` — `OAuthProxy` wired to `request_auth`/`get_token` with the configured scope (research R1)
 - [ ] T015 Implement `resolve_identity()` in `src/yahoo_fantasy_mcp/session.py` — `get_access_token().token` → Yahoo token + `sub`; upserts the user row (research R2). **MUST NOT** accept any caller-supplied identity
 - [ ] T016 Implement `resolve_league_context()` in `src/yahoo_fantasy_mcp/session.py` — builds `Game`/`League`/`Team` per request, validates league membership (raises `LeagueNotAccessibleError`) and football-only (raises `SportNotSupportedError`)
-- [ ] T017 Re-key the caches in `src/yahoo_fantasy_mcp/client.py` to `(league_key, …)` per data-model.md; assert availability remains uncached (makes T008 pass)
+- [X] T017 ✅ **NO FIX NEEDED — claim withdrawn.** Investigated re-keying `client.py` caches. The premise was wrong: caches are per-INSTANCE (`client.py:175,178`), not per-process, and per-request construction already isolates users. T008's tests pass against unmodified code. Tests retained as a regression guard for future pooling/memoisation. Real residual risk is the inverse (universe re-seeded per request → rate limits, spec 001 R5) — logged, not fixed
 - [ ] T018 Add usage recording in `src/yahoo_fantasy_mcp/server.py` — one `usage_events` row per tool call including refusals; records tool name and outcome only, never arguments (data-model.md)
 - [ ] T019 Rewrite `src/yahoo_fantasy_mcp/__main__.py` — HTTP transport via `mcp.run(transport="http", …)`, auth provider attached, no `build_context()` singleton
 
@@ -282,7 +282,7 @@ Task: "Integration test for auth errors in tests/integration/test_auth_errors.py
 
 ### Critical Sequencing Notes
 
-- **T017 (cache re-keying) is a latent data-leak fix**, not a refactor. It must land in Foundational, before any read story serves two users.
+- ~~**T017 (cache re-keying) is a latent data-leak fix**~~ — **WITHDRAWN**. The claimed leak does not exist; caches are per-instance and per-request construction isolates users. See T017. The genuine residual risk is rate-limit exposure from re-seeding the universe every request.
 - **V9 (`WRITE_NOT_APPROVED`) must be run while write approval is still pending** — that state cannot be reproduced once approval lands.
 - **V6 must be run with host approval prompts disabled.** With them enabled it proves nothing about our server's guarantee.
 - **T046 has an unverified dependency** (`change_positions` signature, research R5). Verify against a real team before writing the tool, not after.

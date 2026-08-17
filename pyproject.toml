@@ -1,15 +1,21 @@
 [project]
 name = "yahoo-fantasy-mcp"
 version = "0.1.0"
-description = "Read-only MCP server for Yahoo Fantasy Football: league, roster, and live draft visibility"
+description = "Hosted multi-tenant MCP server for Yahoo Fantasy Football: league, roster, draft visibility, and confirmed roster actions"
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp==3.4.7",
     "yahoo_fantasy_api==2.12.3",
-    "yahoo_oauth==2.1.1",
+    "requests>=2.31",
 ]
 
 [project.optional-dependencies]
+# yahoo_oauth is only used by the legacy local/stdio entrypoint. The hosted
+# path gets per-user tokens from FastMCP's OAuthProxy instead (research R2/R6),
+# so it is deliberately NOT a base dependency.
+local = [
+    "yahoo_oauth==2.1.1",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
