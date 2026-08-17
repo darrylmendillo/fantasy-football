@@ -142,3 +142,15 @@ def sub_b() -> str:
 def anyio_backend() -> str:
     """Run @pytest.mark.anyio tests on asyncio only."""
     return "asyncio"
+
+
+@pytest.fixture
+def fixture_client():
+    """Factory: fixture_client(draft_fixture="draft_midraft.json") -> YahooClient."""
+
+    def _make(draft_fixture: str = "draft_midraft.json") -> Any:
+        from yahoo_fantasy_mcp.client import YahooClient
+
+        return YahooClient(FixtureDataSource(draft_fixture=draft_fixture))
+
+    return _make
