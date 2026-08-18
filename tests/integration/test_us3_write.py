@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import pytest
 
-from yahoo_fantasy_mcp.errors import InvalidConfirmationError, WriteNotApprovedError
+from yahoo_fantasy_mcp.errors import (
+    InvalidConfirmationError,
+    ProposalAlreadyUsedError,
+    WriteNotApprovedError,
+)
 from yahoo_fantasy_mcp.tools_write import (
     UnapprovedLineupWriter,
     tool_confirm_action,
@@ -106,5 +110,19 @@ class TestUnapprovedWriterSeam:
                 now=1010,
                 current_roster={1: "BN", 2: "WR"},
                 lineup_writer=UnapprovedLineupWriter(),
+                team=object(),
+            )
+        # The token must have been burned by the first attempt, not just
+        # refused — a retry (even against a writer that would happily
+        # dispatch) must find nothing left to confirm. This is what proves
+        # verify_and_consume ran, and ran, before set_lineup was ever called.
+        with pytest.raises(ProposalAlreadyUsedError):
+            tool_confirm_action(
+                store,
+                sub=sub_a,
+                token=token,
+                now=1011,
+                current_roster={1: "BN", 2: "WR"},
+                lineup_writer=SpyLineupWriter(),
                 team=object(),
             )
