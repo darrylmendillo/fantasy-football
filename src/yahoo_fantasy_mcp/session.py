@@ -152,3 +152,69 @@ def resolve_league_context(
         client=league,
         total_expected_picks=0,
     )
+
+
+# Game code is a required constructor argument of yahoo_fantasy_api.Game,
+# but functionally irrelevant to what this module uses Game for: to_league()
+# never references it, and league_ids(game_codes=None) below deliberately
+# overrides any sport restriction it might otherwise imply. "nfl" here is a
+# construction requirement, not a behavioral filter (verified against
+# yahoo_fantasy_api source — see this task's plan header).
+_GAME_CONSTRUCTION_CODE = "nfl"
+
+
+class YahooGameFactory:
+    """Builds real yahoo_fantasy_api Game/League objects from a per-request
+    identity. `game_cls` is injectable for testing without a live Yahoo call
+    (mock-validated tier); defaults to the real yahoo_fantasy_api.Game.
+    """
+
+    def __init__(self, game_cls: Any = None) -> None:
+        self._game_cls = game_cls
+
+    def _resolve_game_cls(self) -> Any:
+        if self._game_cls is not None:
+            return self._game_cls
+        from yahoo_fantasy_api import Game  # lazy: unit tests never require it
+
+        return Game
+
+    def _game(self, identity: RequestIdentity) -> Any:
+        adapter = YahooSessionAdapter(identity.access_token)
+        return self._resolve_game_cls()(adapter, _GAME_CONSTRUCTION_CODE)
+
+    def discover_league_ids(self, identity: RequestIdentity) -> list[str]:
+        return self._game(identity).league_ids(game_codes=None)
+
+    def build(self, identity: RequestIdentity, league_key: str) -> Any:
+        return self._game(identity).to_league(league_key)
+
+
+def discover_leagues(game_factory: Any, identity: RequestIdentity) -> list[LeagueSummary]:
+    """All Yahoo fantasy leagues the caller belongs to, across every sport
+    (FR-009). Sport-gating to football-only happens downstream, in
+    require_supported_sport / resolve_league_context — this function's job
+    is to list everything, not filter it (FR-008: unsupported leagues are
+    shown, not hidden).
+
+    team_name is deliberately left None: populating it needs an extra
+    teams() call per discovered league, and no tested guarantee depends on
+    it yet (YAGNI — Principle V).
+    """
+    summaries = []
+    for league_key in game_factory.discover_league_ids(identity):
+        league = game_factory.build(identity, league_key)
+        settings = league.settings()
+        sport = settings["game_code"]
+        summaries.append(
+            LeagueSummary(
+                league_key=settings["league_key"],
+                name=settings["name"],
+                sport=sport,
+                season=int(settings["season"]),
+                is_supported=(sport == SUPPORTED_GAME_CODE),
+                team_key=league.team_key(),
+                team_name=None,
+            )
+        )
+    return summaries
