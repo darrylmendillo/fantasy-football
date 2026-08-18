@@ -11,6 +11,7 @@ closure body has at least representative coverage rather than none.
 
 from __future__ import annotations
 
+import time
 from unittest.mock import patch
 
 import anyio
@@ -66,9 +67,9 @@ def _config() -> ServerConfig:
     )
 
 
-def _access_token(sub: str) -> AccessToken:
+def _access_token(sub: str, expires_at: int | None = None) -> AccessToken:
     return AccessToken(
-        token=f"tok-{sub}", client_id=sub, scopes=[], expires_at=None, claims={"sub": sub}
+        token=f"tok-{sub}", client_id=sub, scopes=[], expires_at=expires_at, claims={"sub": sub}
     )
 
 
@@ -158,15 +159,42 @@ class _PerIdentityGameFactory:
 def test_check_auth_closure_resolves_identity_end_to_end(store, sub_a):
     """Unscoped read: proves the basic identity-resolution wiring inside a
     real registered closure (not just the extracted helper) works, and that
-    a successful call is recorded under the resolved sub."""
+    a successful call is recorded under the resolved sub.
+
+    expires_at=None on the fake token (matching what YahooTokenVerifier.
+    verify_token actually sets today) must surface as an honest
+    expires_in_seconds=None — NOT a fabricated number (final-review
+    Finding 4). See test_check_auth_reports_a_real_expiry_when_available
+    below for the case where the token DOES carry a real expiry."""
     server = build_server(store, _config())
     tools = {t.name: t for t in anyio.run(server.list_tools)}
 
     with patch("yahoo_fantasy_mcp.server.get_access_token", return_value=_access_token(sub_a)):
         result = tools["check_auth"].fn()
 
-    assert result == {"authenticated": True, "expires_in_seconds": 3600, "needs_reauth": False}
+    assert result == {"authenticated": True, "expires_in_seconds": None, "needs_reauth": False}
     assert store.usage_count(sub_a) == 1
+
+
+def test_check_auth_reports_a_real_expiry_when_available(store, sub_a):
+    """When the access token DOES carry a real expires_at, check_auth must
+    derive expires_in_seconds from it (expires_at - now) rather than any
+    hardcoded literal. Regression guard for final-review Finding 4: the
+    previous implementation always returned a hardcoded 3600 no matter what
+    the real token said."""
+    server = build_server(store, _config())
+    tools = {t.name: t for t in anyio.run(server.list_tools)}
+    expires_at = int(time.time()) + 120
+
+    with patch(
+        "yahoo_fantasy_mcp.server.get_access_token",
+        return_value=_access_token(sub_a, expires_at=expires_at),
+    ):
+        result = tools["check_auth"].fn()
+
+    assert result["authenticated"] is True
+    # Allow a small tolerance for wall-clock time elapsed during the call.
+    assert 100 <= result["expires_in_seconds"] <= 120
 
 
 def test_get_roster_closure_threads_league_scoping_and_calls_through(store, sub_a):

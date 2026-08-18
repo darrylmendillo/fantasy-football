@@ -129,7 +129,7 @@ Implementation proceeds to **mock-validated** tier now. **Integration-validated*
 ### Tests for User Story 2 ⚠️ write first, confirm failing
 
 - [X] T029 [P] [US2] Integration tests — actual coverage: `tests/integration/test_us2_reads.py` (Task 6, reviewed; fixed one real return-shape defect during review)
-- [X] T030 [P] [US2] Integration test — actual coverage: `tests/unit/test_session_resolution.py::test_non_football_league_is_refused_as_unsupported` (Task 3) plus `discover_leagues`' `is_supported` field (Task 9a) — `list_leagues` lists non-football leagues, other tools refuse them
+- [X] T030 [P] [US2] Integration test — actual coverage: `tests/unit/test_session_resolution.py::test_non_football_league_is_refused_as_unsupported` (Task 3; rewritten during the final whole-branch review, Finding 2, to call the real `resolve_request_league_context` in `session.py` — the version this test exercised previously called a same-shaped but dead sibling function that no registered tool ever invoked, so this assertion had zero coverage on the live path until the rewrite) plus `discover_leagues`' `is_supported` field (Task 9a) — `list_leagues` lists non-football leagues, other tools refuse them
 - [X] T031 [P] [US2] Regression test — actual coverage: `tests/integration/test_us2_reads.py::test_availability_invariant_holds_deep_into_draft` (Task 6, reviewer independently constructed an adversarial midraft-vs-postdraft scenario and confirmed it catches a real regression)
 
 ### Implementation for User Story 2

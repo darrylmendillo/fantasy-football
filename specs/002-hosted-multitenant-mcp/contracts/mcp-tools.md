@@ -54,8 +54,12 @@ All Yahoo fantasy leagues the caller belongs to (FR-009).
 
 **Parameters**: `season` (int, optional — defaults to current)
 
-**Returns**: array of
-`{ league_key, name, sport, season, is_supported: bool, team_key, team_name }`
+**Returns**: `{ leagues: array of
+{ league_key, name, sport, season, is_supported: bool, team_key, team_name } }`
+
+(Wrapped in a `leagues` key, not returned as a bare top-level array — a bare
+list broke FastMCP's structured-output validation in practice, the same
+defect class already fixed once for `list_teams`/`get_standings`.)
 
 `is_supported` is `false` for non-football leagues; they are listed so the user
 can see them, but every other tool refuses them (FR-008).

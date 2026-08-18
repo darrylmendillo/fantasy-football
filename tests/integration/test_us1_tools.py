@@ -28,7 +28,8 @@ def test_list_leagues_returns_all_leagues_with_support_flag():
         LeagueSummary("461.l.111", "A League", "nfl", 2026, True, "461.l.111.t.1", "My Team"),
         LeagueSummary("458.l.999", "Hoops", "nba", 2026, False, "458.l.999.t.3", "Hoop Team"),
     ]
-    rows = tool_list_leagues(leagues)
+    result = tool_list_leagues(leagues)
+    rows = result["leagues"]
     assert len(rows) == 2
     by_key = {r["league_key"]: r for r in rows}
     assert by_key["461.l.111"]["is_supported"] is True
@@ -37,12 +38,20 @@ def test_list_leagues_returns_all_leagues_with_support_flag():
     assert by_key["458.l.999"]["is_supported"] is False
 
 
+def test_list_leagues_returns_a_dict_not_a_bare_list():
+    """A bare list as the top-level return breaks FastMCP's structured
+    output validation (real client failure: 'Invalid structured content
+    returned by tool list_leagues'). The wrapping dict is the fix."""
+    assert isinstance(tool_list_leagues([]), dict)
+    assert tool_list_leagues([])["leagues"] == []
+
+
 def test_list_leagues_distinguishes_leagues_enough_to_choose():
     """US2 sc.1 — name, sport, and season must all be present."""
     leagues = [
         LeagueSummary("461.l.111", "A League", "nfl", 2026, True, "461.l.111.t.1", "My Team"),
     ]
-    row = tool_list_leagues(leagues)[0]
+    row = tool_list_leagues(leagues)["leagues"][0]
     assert row["name"] == "A League"
     assert row["sport"] == "nfl"
     assert row["season"] == 2026

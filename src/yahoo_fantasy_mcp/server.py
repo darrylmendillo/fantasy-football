@@ -36,13 +36,11 @@ from yahoo_fantasy_mcp.confirm import hash_token
 from yahoo_fantasy_mcp.errors import AuthRequiredError, InvalidConfirmationError, YahooFantasyError
 from yahoo_fantasy_mcp.logging_utils import get_logger
 from yahoo_fantasy_mcp.session import (
-    LeagueContext,
     RequestIdentity,
     YahooGameFactory,
     discover_leagues,
-    require_league_membership,
-    require_supported_sport,
     resolve_identity,
+    resolve_request_league_context,
 )
 from yahoo_fantasy_mcp.tools_read import (
     tool_check_auth,
@@ -72,39 +70,6 @@ WRITE_ANNOTATIONS = ToolAnnotations(readOnlyHint=False, destructiveHint=True, op
 # configurable; add a ServerConfig field if a real deployment ever needs a
 # non-16-spot league. YAGNI until then.
 DEFAULT_ROSTER_SIZE = 16
-
-
-def resolve_request_league_context(
-    game_factory: Any, identity: RequestIdentity, league_key: str, leagues: list
-) -> LeagueContext:
-    """Shared by every league-scoped tool: validate membership and sport
-    before building any Yahoo object (Task 3's guarantee), then wrap the
-    result as a usable client.
-
-    Deliberately does NOT fetch num_teams here (contrast with an earlier
-    draft of this function): test_tool_wiring.py exercises league-scoping
-    with a fake game_factory whose `.build()` returns a bare stand-in object
-    that has no reason to answer a get_league_info()-shaped call, and
-    scoping/membership/sport-gating is exactly what that test is checking —
-    not draft-pick counting. total_expected_picks therefore stays a
-    placeholder here, same as Task 3's resolve_league_context; the two tools
-    that actually need a real value (get_draft_results,
-    get_available_players) compute it themselves, on demand, via
-    `_total_expected_picks` below.
-    """
-    require_league_membership(league_key, {lg.league_key for lg in leagues})
-    match = next(lg for lg in leagues if lg.league_key == league_key)
-    require_supported_sport(match.sport)
-    league = game_factory.build(identity, league_key)
-    from yahoo_fantasy_mcp.client import YahooClient, YahooFantasyApiDataSource
-
-    client = YahooClient(YahooFantasyApiDataSource(league, match.team_key or ""))
-    return LeagueContext(
-        league_key=league_key,
-        team_key=match.team_key or "",
-        client=client,
-        total_expected_picks=0,
-    )
 
 
 def _total_expected_picks(client: Any) -> int:
@@ -137,8 +102,10 @@ def _current_roster_positions(client: Any, team_key: str) -> dict[int, str]:
     return {p.player_id: (p.positions[0] if p.positions else "BN") for p in roster.players}
 
 
-def _current_identity(store: Any) -> RequestIdentity:
-    """Resolve the calling user from the live FastMCP access token.
+def _current_access_token() -> Any:
+    """The raw, verified FastMCP AccessToken for this request — the single
+    fetch point both `_current_identity` and `check_auth` build on, so
+    neither has to call `get_access_token()` a second time.
     get_access_token().claims["sub"] and .token are populated on every
     request by YahooTokenVerifier.verify_token — see this task's plan
     header for the verified trace through OAuthProxy.load_access_token.
@@ -146,6 +113,12 @@ def _current_identity(store: Any) -> RequestIdentity:
     token = get_access_token()
     if token is None or not (token.claims or {}).get("sub"):
         raise AuthRequiredError()
+    return token
+
+
+def _current_identity(store: Any) -> RequestIdentity:
+    """Resolve the calling user from the live FastMCP access token."""
+    token = _current_access_token()
     return resolve_identity(store, token.token, token.claims["sub"])
 
 
@@ -172,9 +145,18 @@ def build_server(store: Any, config: Any) -> FastMCP:
     def check_auth() -> dict:
         sub = None
         try:
-            identity = _current_identity(store)
+            token = _current_access_token()
+            identity = resolve_identity(store, token.token, token.claims["sub"])
             sub = identity.sub
-            result = tool_check_auth(identity, expires_in_seconds=3600)
+            # token.expires_at is a Unix timestamp, or None when Yahoo/FastMCP
+            # gives no expiry (research: YahooTokenVerifier.verify_token
+            # always sets expires_at=None today — Yahoo's userinfo endpoint
+            # exposes no expiry). Report that honestly rather than fabricate
+            # a number: a caller must be able to tell "unknown" from "3600".
+            expires_in_seconds = (
+                int(token.expires_at - time.time()) if token.expires_at is not None else None
+            )
+            result = tool_check_auth(identity, expires_in_seconds=expires_in_seconds)
             _record(store, sub, "check_auth", "ok")
             return result
         except YahooFantasyError as exc:
@@ -186,7 +168,7 @@ def build_server(store: Any, config: Any) -> FastMCP:
         description="All Yahoo fantasy leagues the caller belongs to, across every sport.",
         annotations=READ_ANNOTATIONS,
     )
-    def list_leagues() -> list[dict]:
+    def list_leagues() -> dict:
         sub = None
         try:
             identity = _current_identity(store)

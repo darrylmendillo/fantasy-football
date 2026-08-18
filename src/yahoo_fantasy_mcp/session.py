@@ -19,6 +19,7 @@ from typing import Any
 
 import requests
 
+from yahoo_fantasy_mcp.client import YahooClient, YahooFantasyApiDataSource
 from yahoo_fantasy_mcp.errors import LeagueNotAccessibleError, SportNotSupportedError
 
 # Yahoo's game code for NFL. This release is football-only (FR-008); other
@@ -124,14 +125,16 @@ class LeagueContext:
     total_expected_picks: int
 
 
-def resolve_league_context(
+def resolve_request_league_context(
     game_factory: Any,
     identity: RequestIdentity,
     league_key: str,
     leagues: list[LeagueSummary],
 ) -> LeagueContext:
-    """Scope this request to one league, refusing anything the caller cannot
-    or should not reach.
+    """Shared by every league-scoped tool in server.py: the request stops
+    being anonymous and starts being scoped to one user's one league here.
+    Every isolation guarantee in the product either holds here or does not
+    hold at all.
 
     Order matters: membership and sport are checked BEFORE any Yahoo object
     is constructed, so a refused request costs no upstream call.
@@ -140,16 +143,23 @@ def resolve_league_context(
     helper (not reimplemented here) — it already exists in this module and
     duplicating its check inline would be exactly the "verbatim duplication
     of a logic block" the review rubric flags as a defect.
+
+    Deliberately does NOT fetch num_teams here: total_expected_picks stays a
+    placeholder (0). The two tools that actually need a real value
+    (get_draft_results, get_available_players) compute it themselves, on
+    demand, via server.py's `_total_expected_picks` — never cached, since
+    num_teams could change between requests.
     """
     require_league_membership(league_key, {lg.league_key for lg in leagues})
     match = next(lg for lg in leagues if lg.league_key == league_key)
     require_supported_sport(match.sport)
 
     league = game_factory.build(identity, league_key)
+    client = YahooClient(YahooFantasyApiDataSource(league, match.team_key or ""))
     return LeagueContext(
         league_key=league_key,
         team_key=match.team_key or "",
-        client=league,
+        client=client,
         total_expected_picks=0,
     )
 
@@ -193,9 +203,9 @@ class YahooGameFactory:
 def discover_leagues(game_factory: Any, identity: RequestIdentity) -> list[LeagueSummary]:
     """All Yahoo fantasy leagues the caller belongs to, across every sport
     (FR-009). Sport-gating to football-only happens downstream, in
-    require_supported_sport / resolve_league_context — this function's job
-    is to list everything, not filter it (FR-008: unsupported leagues are
-    shown, not hidden).
+    require_supported_sport / resolve_request_league_context — this
+    function's job is to list everything, not filter it (FR-008: unsupported
+    leagues are shown, not hidden).
 
     team_name is deliberately left None: populating it needs an extra
     teams() call per discovered league, and no tested guarantee depends on

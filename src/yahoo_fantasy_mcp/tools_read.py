@@ -13,11 +13,13 @@ from yahoo_fantasy_mcp.draft import build_draft_snapshot
 from yahoo_fantasy_mcp.session import LeagueSummary, RequestIdentity
 
 
-def tool_check_auth(identity: RequestIdentity, expires_in_seconds: int) -> dict:
+def tool_check_auth(identity: RequestIdentity, expires_in_seconds: int | None) -> dict:
     """Whether the caller's Yahoo authorization is usable.
 
     Returns booleans and a duration only. The access token is deliberately
-    not referenced in the output (FR-026).
+    not referenced in the output (FR-026). `expires_in_seconds` is `None`
+    when the caller (server.py's check_auth closure) has no real expiry to
+    report — never a fabricated placeholder.
     """
     authenticated = bool(identity.access_token)
     return {
@@ -27,26 +29,34 @@ def tool_check_auth(identity: RequestIdentity, expires_in_seconds: int) -> dict:
     }
 
 
-def tool_list_leagues(leagues: list[LeagueSummary]) -> list[dict]:
+def tool_list_leagues(leagues: list[LeagueSummary]) -> dict:
     """All leagues the caller belongs to (FR-009).
 
     Unsupported (non-football) leagues are included with is_supported=False
     rather than filtered out: a user who sees their basketball league listed
     and refused understands the product better than one who thinks it is
     missing (FR-008).
+
+    Returns a dict (`{"leagues": [...]}`), not a bare list — matching
+    tool_list_teams/tool_get_standings below. A bare list here previously
+    broke FastMCP's structured-content validation on every tool whose
+    top-level return type is a list (see server.py's list_leagues, which
+    shares this return value verbatim).
     """
-    return [
-        {
-            "league_key": lg.league_key,
-            "name": lg.name,
-            "sport": lg.sport,
-            "season": lg.season,
-            "is_supported": lg.is_supported,
-            "team_key": lg.team_key,
-            "team_name": lg.team_name,
-        }
-        for lg in leagues
-    ]
+    return {
+        "leagues": [
+            {
+                "league_key": lg.league_key,
+                "name": lg.name,
+                "sport": lg.sport,
+                "season": lg.season,
+                "is_supported": lg.is_supported,
+                "team_key": lg.team_key,
+                "team_name": lg.team_name,
+            }
+            for lg in leagues
+        ]
+    }
 
 
 def tool_get_league_info(client: YahooClient) -> dict:
