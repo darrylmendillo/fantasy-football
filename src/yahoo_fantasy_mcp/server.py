@@ -395,7 +395,7 @@ def build_server(store: Any, config: Any) -> FastMCP:
             identity = _current_identity(store)
             sub = identity.sub
             row = store.get_proposal_by_hash(hash_token(confirmation_token))
-            if row is None:
+            if row is None or row.sub != identity.sub:
                 raise InvalidConfirmationError()
             leagues = discover_leagues(game_factory, identity)
             ctx = resolve_request_league_context(game_factory, identity, row.league_key, leagues)
