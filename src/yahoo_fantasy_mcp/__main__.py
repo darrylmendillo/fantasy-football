@@ -11,7 +11,7 @@ from __future__ import annotations
 from yahoo_fantasy_mcp.auth_proxy import build_auth_proxy
 from yahoo_fantasy_mcp.config import load_config
 from yahoo_fantasy_mcp.logging_utils import get_logger
-from yahoo_fantasy_mcp.server import mcp, register_tools
+from yahoo_fantasy_mcp.server import build_server
 from yahoo_fantasy_mcp.store import Store
 
 logger = get_logger(__name__)
@@ -20,10 +20,10 @@ logger = get_logger(__name__)
 def main() -> None:
     config = load_config()
     store = Store(config.db_path)
-    mcp.auth = build_auth_proxy(config)
-    register_tools(mcp, store, config)
+    mcp_server = build_server(store, config)
+    mcp_server.auth = build_auth_proxy(config)
     logger.info("starting yahoo-fantasy-mcp (http) on port %s", config.port)
-    mcp.run(transport="http", host="0.0.0.0", port=config.port)
+    mcp_server.run(transport="http", host="0.0.0.0", port=config.port)
 
 
 if __name__ == "__main__":
