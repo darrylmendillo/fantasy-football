@@ -52,8 +52,18 @@ class ServerConfig:
 
     @property
     def write_enabled(self) -> bool:
-        """Whether Yahoo has granted write scope. Read by the write tools to
-        produce WRITE_NOT_APPROVED instead of a confusing upstream error."""
+        """Whether Yahoo has granted write scope.
+
+        Forward-looking: nothing in `src/` reads this property yet. The
+        actual write gate today is the hardcoded `UnapprovedLineupWriter`
+        seam in server.py's `confirm_action` closure, which refuses
+        unconditionally with WRITE_NOT_APPROVED regardless of this value
+        (dispatch is blocked on gate G3 — see tools_write.py). This
+        property is ready for the day a real `LineupWriter` lands and
+        write-vs-read selection needs to consult granted scope; it is not
+        wired to anything yet, and no code should claim otherwise (see
+        auth_proxy.py's build_auth_proxy docstring for the full context).
+        """
         return self.yahoo_scope.strip() == "fspt-w"
 
 

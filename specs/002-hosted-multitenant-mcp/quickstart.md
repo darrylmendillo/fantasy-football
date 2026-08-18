@@ -260,6 +260,17 @@ Confirm: restart preserves connected users (tokens survive); pending proposals
 either survive restart or fail closed as expired — **never** silently succeed
 after a restart; logs contain no token-shaped strings.
 
+### ⚠️ Do not rotate `YAHOO_CLIENT_SECRET` without a re-auth plan
+
+FastMCP's `OAuthProxy` stores every user's Yahoo token in an encrypted store
+whose location/encryption key is derived from `YAHOO_CLIENT_SECRET`. Rotating
+that secret therefore silently orphans every currently-stored session at
+once — nobody is notified, and affected users will simply start seeing
+`AUTH_REQUIRED`/`AUTH_EXPIRED` the next time they call a tool, with no
+indication that a server-side secret rotation was the cause. Do not rotate
+`YAHOO_CLIENT_SECRET` unless you are prepared for every connected user to
+re-authenticate from scratch.
+
 ---
 
 ## Automated coverage expectation

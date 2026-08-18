@@ -69,7 +69,10 @@ class YahooTokenVerifier(TokenVerifier):
             return None
 
         # Yahoo's userinfo endpoint exposes no granted-scope info; access gating
-        # happens at the tool layer via config.write_enabled, not MCP-level scopes.
+        # happens at the tool layer, not MCP-level scopes. Today that gate is
+        # the hardcoded UnapprovedLineupWriter seam in server.py (T046/gate
+        # G3), not config.write_enabled — see build_auth_proxy's docstring
+        # below for the full picture.
         return AccessToken(
             token=token,
             client_id=str(sub),
@@ -100,8 +103,15 @@ def build_auth_proxy(config: ServerConfig) -> OAuthProxy:
     reject every single authenticated request. `valid_scopes` below is a
     different, legitimate mechanism (what scope MCP clients request during
     OAuth consent/DCR) and is unaffected by this. Real write-vs-read gating
-    lives at the tool layer (FR-025, `config.write_enabled` /
-    `WriteNotApprovedError`), not via MCP protocol-level scope enforcement.
+    lives at the tool layer (FR-025), not via MCP protocol-level scope
+    enforcement — but as of this writing that gate is the hardcoded
+    `UnapprovedLineupWriter` in server.py's `confirm_action` closure
+    (`WriteNotApprovedError` unconditionally, regardless of config), NOT
+    `config.write_enabled`. Nothing in `src/` currently reads
+    `config.write_enabled`; it exists as a forward-looking property for when
+    a real `LineupWriter` implementation lands (see tools_write.py's module
+    docstring — dispatch is blocked on gate G3) and selecting between
+    writers based on granted scope becomes meaningful.
     """
     scopes = [s for s in config.yahoo_scope.split() if s]
     return OAuthProxy(

@@ -8,8 +8,11 @@ valid confirmation.
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
+from yahoo_fantasy_mcp.confirm import hash_token
 from yahoo_fantasy_mcp.errors import (
     InvalidConfirmationError,
     ProposalAlreadyUsedError,
@@ -53,10 +56,25 @@ class TestProposeIsInert:
         assert result["expires_in_seconds"] == 300
 
     def test_propose_never_touches_the_writer(self, store, sub_a):
-        """FR-017: proposing changes nothing upstream."""
-        writer = SpyLineupWriter()
-        _propose(store, sub_a)
-        assert writer.calls == []
+        """FR-017: proposing changes nothing upstream.
+
+        `tool_propose_set_lineup` takes no writer parameter at all — by
+        design, propose is structurally incapable of touching a writer, not
+        merely "happens not to" for a particular fake instance the test
+        constructs and never passes in (that was the bug: the previous
+        version of this test built a SpyLineupWriter and asserted
+        `writer.calls == []` without ever wiring the spy into the call,
+        making the assertion true regardless of implementation). Prove both
+        halves instead: (1) the function's signature has no writer-shaped
+        parameter, and (2) the proposal this call creates is still sitting
+        there as "pending" afterward — nothing consumed or applied it."""
+        params = set(inspect.signature(tool_propose_set_lineup).parameters)
+        assert not any("writer" in p for p in params)
+
+        result = _propose(store, sub_a)
+        row = store.get_proposal_by_hash(hash_token(result["confirmation_token"]))
+        assert row.status == "pending"
+        assert row.consumed_at is None
 
 
 class TestConfirmGatesTheWrite:

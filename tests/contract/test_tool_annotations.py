@@ -57,13 +57,21 @@ def test_confirm_action_is_destructive(tools):
 
 
 def test_no_tool_offers_a_confirmation_bypass(tools):
-    """FR-017: there is no single-call write path, by construction."""
+    """FR-017: there is no single-call write path, by construction.
+
+    Direct attribute access (no getattr fallback): `.parameters` exists on
+    FastMCP 3.4.7's tool objects today, and this is a security-relevant
+    assertion — a future rename should fail this test loudly, not silently
+    pass because the getattr default made the check vacuous.
+    """
     for name, tool in tools.items():
-        params = set(getattr(tool, "parameters", {}).get("properties", {}))
+        params = set(tool.parameters.get("properties", {}))
         assert "force" not in params, name
         assert "skip_confirm" not in params, name
 
 
-def test_all_nine_tools_are_registered(tools):
+def test_all_ten_tools_are_registered(tools):
+    """Exact match, not issubset: an unexpected 11th tool registering
+    without being vetted here would previously slip through undetected."""
     expected = READ_ONLY_TOOLS | DESTRUCTIVE_TOOLS
-    assert expected.issubset(set(tools)), sorted(expected - set(tools))
+    assert expected == set(tools), (sorted(expected - set(tools)), sorted(set(tools) - expected))
