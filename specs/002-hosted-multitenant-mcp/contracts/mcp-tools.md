@@ -42,7 +42,11 @@ Whether the caller's Yahoo authorization is currently usable.
 
 **Parameters**: none
 
-**Returns**: `{ authenticated: bool, expires_in_seconds: int, needs_reauth: bool }`
+**Returns**: `{ authenticated: bool, expires_in_seconds: int | null, needs_reauth: bool }`
+
+`expires_in_seconds` is `null` when the upstream token carries no expiry —
+which is every current deployment, since Yahoo's userinfo endpoint (what
+`YahooTokenVerifier` validates against) exposes no expiry information.
 
 **MUST NOT** return a token value under any circumstance.
 

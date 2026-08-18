@@ -297,6 +297,97 @@ Task: "Integration test for auth errors in tests/integration/test_auth_errors.py
 
 ---
 
+## Phase 9: Follow-ups from the final whole-branch review (2026-08-18)
+
+**Not blocking** — the final review's own triage classified these as
+real-but-deferrable, in scope only because the whole-branch view (not any
+single task's own review) is what surfaced them. Fixed at the same time
+(fix wave, commits 384dad7/7583391): the schema violation on `list_leagues`,
+the dead `session.resolve_league_context` whose tests guarded unreachable
+code, `check_auth`'s fabricated expiry, the `config.write_enabled`
+documentation mismatch, and three test-hygiene minors. What follows is
+everything the review found that was NOT part of that fix wave.
+
+- [ ] T071 **Per-request Yahoo call amplification.** `discover_leagues` +
+  `resolve_request_league_context` + `_total_expected_picks` each
+  independently re-fetch league data on every call; `League.team_key()`
+  costs a full teams-across-all-leagues call per discovered league;
+  `get_available_players`'s universe cache never actually caches because
+  the `YahooFantasyApiDataSource` instance is per-request; `YahooTokenVerifier`
+  has no `cache_ttl_seconds` (FastMCP's own `GitHubTokenVerifier` offers one
+  for exactly this). For a user in 3 leagues, one `get_available_players`
+  call is roughly 17 upstream calls — this is the live-draft polling path,
+  and the constitution requires polling/staleness to be "an explicit,
+  tested part of the design." Not urgent at mock-validated tier (nothing
+  calls live Yahoo yet), but should land before any real draft-day use.
+  Cheapest fixes, in order: derive all team keys from one `get_teams_raw`
+  during discovery instead of N `team_key()` calls; memoize discovery for
+  the life of a request or a short per-`sub` TTL; add `cache_ttl_seconds`
+  to `YahooTokenVerifier`.
+
+- [ ] T072 **No exception boundary beyond `YahooFantasyError` — and this
+  reframes T027.** Every tool closure in `server.py` catches only
+  `YahooFantasyError`; FastMCP's `mask_error_details` defaults to `False`,
+  so an unhandled exception (e.g. a malformed `changes` entry raising
+  `KeyError` in `tools_write.py`) reaches the client with raw exception
+  text and records no usage row. Originally this looked like a narrow gap
+  (T027's note: "OAuthProxy refresh makes the revoked-token case narrower
+  now"). The final review found it's actually the *dominant* unclassified
+  path: `discover_leagues` runs first on every league-scoped tool and on
+  `list_leagues`, and its calls go through `YahooGameFactory`, **not**
+  through `YahooFantasyApiDataSource._call` — the only place that maps
+  401→`AuthExpiredError` and 429/5xx→`RateLimitedError`. Fix: add a
+  catch-all `except Exception -> UpstreamError` at the closure boundary
+  (recording `"error"` usage), pass `mask_error_details=True` when
+  constructing `FastMCP`, route discovery calls through the same
+  classification `_call` uses, and validate `changes` entry shape in
+  `tool_propose_set_lineup` before it reaches a `KeyError`.
+
+- [ ] T073 **Proposal preview omits player names — FR-018.** FR-018
+  requires the preview "name the specific players"; `contracts/mcp-tools.md`
+  lists `player_name` in the preview shape. `tools_write.py`'s
+  `propose_set_lineup` preview currently has `{player_id, from_position,
+  to_position}` only — `_current_roster_positions` already fetches full
+  roster data and discards the names. Fix: thread `{player_id: name}`
+  alongside the position map into the preview.
+
+- [ ] T074 **Minor cleanup batch** (each cheap, none urgent):
+  - `check_auth`'s `authenticated`/`needs_reauth` logic
+    (`tools_read.py:22-27`) is tautological — always `True`/`False` on the
+    success path, since `_current_identity` already raises otherwise.
+    Provably harmless today (bearer middleware rejects bad/expired tokens
+    pre-dispatch), but worth deriving honestly if a path ever reaches this
+    code with a token that could plausibly fail.
+  - Auth-failure refusals record no usage row (`_record` no-ops when
+    `sub is None`) — contract says every tool records usage including
+    refusals; unmetered because there's no `sub` to attribute an
+    unauthenticated refusal to. Needs a real design decision (a
+    system-level/anonymous usage bucket?), not a quick fix.
+  - `get_roster`'s `team_key` argument is unvalidated against the resolved
+    league — harmless today (bounded by Yahoo's own token-based
+    authorization) but outside the "membership validated on every call"
+    contract statement. Cheap defense-in-depth: `team_key.startswith(f"{league_key}.t.")`.
+  - `tool_confirm_action` never asserts `row.team_key == ctx.team_key` —
+    equal by construction today, matters once US4/US5 add proposals that
+    reference other teams.
+  - Retrying a confirm after `PRECONDITIONS_CHANGED` (row now `failed`)
+    reports `PROPOSAL_EXPIRED`, not what happened — imprecise but not
+    incorrect (both are terminal-refusal codes).
+  - `list_leagues`/`propose_set_lineup` implementations don't yet support
+    the `season`/`week` optional parameters `contracts/mcp-tools.md`
+    documents — implement or amend the contract.
+  - No concurrency test exists (two users hitting the server at once, not
+    just two sequentially-constructed identities). The final review did
+    trace this by hand — `sqlite3.threadsafety == 3`, `Store` shares one
+    connection, so a racing `mark_consumed`'s conditional `UPDATE` still
+    holds under a shared transaction — and concluded the guarantee holds
+    without a dedicated test. Worth writing one anyway for regression
+    protection: N threads invoking registered closures with distinct
+    `sub`s, asserting no cross-attribution in `usage_events` and exactly
+    one successful confirm among racers.
+
+---
+
 ## Notes
 
 - [P] = different files, no dependencies
