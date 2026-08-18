@@ -75,13 +75,13 @@ Implementation proceeds to **mock-validated** tier now. **Integration-validated*
 - [X] T010 Implement SQLite schema and accessors in `src/yahoo_fantasy_mcp/store.py` per data-model.md — `users`, `usage_events`, `proposals` tables with indices on `token_hash` and `sub`
 - [X] T011 [P] Implement `YahooSessionAdapter` in `src/yahoo_fantasy_mcp/session.py` — wraps a `requests.Session` with `Authorization: Bearer <token>`; deliberately omits `refresh_access_token`
 - [X] T012 [P] Extend `src/yahoo_fantasy_mcp/errors.py` with the contract's error codes: `LeagueNotAccessibleError`, `SportNotSupportedError`, `WriteNotApprovedError`, `InvalidConfirmationError`, `ProposalExpiredError`, `ProposalAlreadyUsedError`, `PreconditionsChangedError`, `TradeInitiationNotSupportedError`
-- [ ] T013 Implement `YahooTokenVerifier` in `src/yahoo_fantasy_mcp/auth_proxy.py` — validates the opaque Yahoo token via userinfo and returns `sub` (research R3/R4), modeled on FastMCP's `GitHubTokenVerifier`
-- [ ] T014 Implement `build_auth_proxy()` in `src/yahoo_fantasy_mcp/auth_proxy.py` — `OAuthProxy` wired to `request_auth`/`get_token` with the configured scope (research R1)
-- [ ] T015 Implement `resolve_identity()` in `src/yahoo_fantasy_mcp/session.py` — `get_access_token().token` → Yahoo token + `sub`; upserts the user row (research R2). **MUST NOT** accept any caller-supplied identity
-- [ ] T016 Implement `resolve_league_context()` in `src/yahoo_fantasy_mcp/session.py` — builds `Game`/`League`/`Team` per request, validates league membership (raises `LeagueNotAccessibleError`) and football-only (raises `SportNotSupportedError`)
+- [X] T013 Implement `YahooTokenVerifier` in `src/yahoo_fantasy_mcp/auth_proxy.py` — validates the opaque Yahoo token via userinfo and returns `sub` (research R3/R4), modeled on FastMCP's `GitHubTokenVerifier`
+- [X] T014 Implement `build_auth_proxy()` in `src/yahoo_fantasy_mcp/auth_proxy.py` — `OAuthProxy` wired to `request_auth`/`get_token` with the configured scope (research R1)
+- [X] T015 Implement `resolve_identity()` in `src/yahoo_fantasy_mcp/session.py` — `get_access_token().token` → Yahoo token + `sub`; upserts the user row (research R2). **MUST NOT** accept any caller-supplied identity
+- [X] T016 Implement `resolve_league_context()` in `src/yahoo_fantasy_mcp/session.py` — builds `Game`/`League`/`Team` per request, validates league membership (raises `LeagueNotAccessibleError`) and football-only (raises `SportNotSupportedError`)
 - [X] T017 ✅ **NO FIX NEEDED — claim withdrawn.** Investigated re-keying `client.py` caches. The premise was wrong: caches are per-INSTANCE (`client.py:175,178`), not per-process, and per-request construction already isolates users. T008's tests pass against unmodified code. Tests retained as a regression guard for future pooling/memoisation. Real residual risk is the inverse (universe re-seeded per request → rate limits, spec 001 R5) — logged, not fixed
-- [ ] T018 Add usage recording in `src/yahoo_fantasy_mcp/server.py` — one `usage_events` row per tool call including refusals; records tool name and outcome only, never arguments (data-model.md)
-- [ ] T019 Rewrite `src/yahoo_fantasy_mcp/__main__.py` — HTTP transport via `mcp.run(transport="http", …)`, auth provider attached, no `build_context()` singleton
+- [X] T018 Add usage recording in `src/yahoo_fantasy_mcp/server.py` — one `usage_events` row per tool call including refusals; records tool name and outcome only, never arguments (data-model.md)
+- [X] T019 Rewrite `src/yahoo_fantasy_mcp/__main__.py` — HTTP transport via `mcp.run(transport="http", …)`, auth provider attached, no `build_context()` singleton
 
 **Checkpoint**: Server starts over HTTP, presents OAuth metadata, and resolves a per-request identity. User stories can begin.
 
@@ -95,18 +95,26 @@ Implementation proceeds to **mock-validated** tier now. **Integration-validated*
 
 ### Tests for User Story 1 ⚠️ write first, confirm failing
 
-- [ ] T020 [P] [US1] Contract test in `tests/contract/test_oauth_metadata.py` — OAuth discovery endpoints are served and advertise the expected scope
-- [ ] T021 [P] [US1] Integration test in `tests/integration/test_check_auth.py` — returns `authenticated`/`expires_in_seconds`/`needs_reauth` and **never** a token value (FR-026)
-- [ ] T022 [P] [US1] Integration test in `tests/integration/test_tenant_isolation.py` — two identities call `list_leagues`; each sees only its own, and cross-tenant `league_key` access raises `LeagueNotAccessibleError` (FR-005, quickstart V3)
-- [ ] T023 [P] [US1] Integration test in `tests/integration/test_auth_errors.py` — revoked/expired upstream surfaces `AUTH_EXPIRED` with reconnect guidance, not a raw error (FR-006, quickstart V10)
+> **Task 10 reconciliation note (2026-08-18):** T020–T023 specify exact filenames that
+> the actual SDD execution consolidated differently — the coverage genuinely exists,
+> just organized per-implementation-task rather than per-original-task-number. Checked
+> off where real, reviewed coverage exists; file mapping given inline. This is a
+> deliberate organizational choice made and reviewed during Tasks 1–9b, not an
+> unverified claim — see `.superpowers/sdd/2026-08-17-hosted-multitenant-mcp-execution/progress.md`
+> for the review trail of each.
+
+- [X] T020 [P] [US1] Contract test — actual coverage: `tests/unit/test_auth_proxy_build.py` (endpoints/scopes wired correctly, Task 2, reviewed) plus this task's own live `curl` verification against a running server (quickstart.md "MCP Inspector verification" section) — no dedicated `tests/contract/test_oauth_metadata.py` file exists
+- [X] T021 [P] [US1] Integration test — actual coverage: `tests/integration/test_us1_tools.py` (Task 5, reviewed)
+- [X] T022 [P] [US1] Integration test — actual coverage: `tests/unit/test_session_resolution.py` (Task 3, membership/refusal logic), `tests/unit/test_discover_leagues.py::test_each_users_token_produces_an_independently_constructed_game` (Task 9a), and `tests/integration/test_tool_wiring.py::test_confirm_action_rejects_a_different_users_token` (Task 9b fix round — the adversarial cross-tenant case, reviewed twice)
+- [ ] T023 [P] [US1] Integration test — **genuinely not covered.** No test exercises a revoked/expired upstream token surfacing `AUTH_EXPIRED` with reconnect guidance; see T027 below, the same real gap.
 
 ### Implementation for User Story 1
 
-- [ ] T024 [US1] Implement `check_auth` in `src/yahoo_fantasy_mcp/tools_read.py` per contracts — no token value in any field
-- [ ] T025 [US1] Implement `list_leagues` in `src/yahoo_fantasy_mcp/tools_read.py` using `Game.league_ids()`, returning `league_key`/`name`/`sport`/`season`/`is_supported`/`team_key`/`team_name` (research R5)
-- [ ] T026 [US1] Register both tools with `readOnlyHint=true`, `openWorldHint=true` annotations in `src/yahoo_fantasy_mcp/server.py` (FR-024)
-- [ ] T027 [US1] Map upstream auth failures to `AUTH_REQUIRED`/`AUTH_EXPIRED` in `src/yahoo_fantasy_mcp/auth_proxy.py`, reusing the Phase 1 `classify_auth_failure` approach
-- [ ] T028 [US1] Verify `mask_secrets` covers all new log sites in `src/yahoo_fantasy_mcp/logging_utils.py`; add a test asserting no token-shaped string appears in logs (FR-026)
+- [X] T024 [US1] Implement `check_auth` in `src/yahoo_fantasy_mcp/tools_read.py` per contracts — no token value in any field
+- [X] T025 [US1] Implement `list_leagues` in `src/yahoo_fantasy_mcp/tools_read.py` using `Game.league_ids()`, returning `league_key`/`name`/`sport`/`season`/`is_supported`/`team_key`/`team_name` (research R5)
+- [X] T026 [US1] Register both tools with `readOnlyHint=true`, `openWorldHint=true` annotations in `src/yahoo_fantasy_mcp/server.py` (FR-024)
+- [ ] T027 [US1] **Genuine, unclosed gap — verified, not just left over.** `_current_identity` (server.py) raises `AuthRequiredError` when a token is missing/unidentifiable, but nothing maps a Yahoo `401` that indicates a *revoked/expired* upstream session (as opposed to a not-yet-provisioned league) to `AUTH_EXPIRED` reusing Phase 1's `classify_auth_failure` — that function exists (`auth.py`) but is never called from the new `auth_proxy.py`/`server.py` path. Plausible reason this is smaller than it looks: `OAuthProxy` already handles token refresh transparently (Task 2), so the case this task defends against is narrower now (a genuinely *revoked* grant, not routine expiry) — but it is still unhandled. Real work for a follow-up task, not integration-gated.
+- [ ] T028 [US1] **Genuine, unclosed gap.** `mask_secrets` itself is tested generically (`tests/unit/test_errors.py`), but no test specifically asserts it covers the log call sites added across Tasks 1–9b (`auth_proxy.py`, `session.py`, `confirm.py`, `server.py`). Worth a follow-up test before this ships past mock-validated tier.
 
 **Checkpoint**: US1 fully functional. Run quickstart V1, V2, V3, V10. **This is the MVP** — a real user can connect and see their leagues.
 
@@ -120,17 +128,17 @@ Implementation proceeds to **mock-validated** tier now. **Integration-validated*
 
 ### Tests for User Story 2 ⚠️ write first, confirm failing
 
-- [ ] T029 [P] [US2] Integration tests in `tests/integration/test_reads_multi_league.py` — each read tool returns correct data for two different `league_key`s in the same session
-- [ ] T030 [P] [US2] Integration test in `tests/integration/test_sport_gating.py` — a non-football league appears in `list_leagues` with `is_supported=false` but every other tool raises `SportNotSupportedError` (FR-008)
-- [ ] T031 [P] [US2] Regression test in `tests/unit/test_draft_invariant_multitenant.py` — the availability invariant holds per league, **including a late-draft fixture** (FR-012; spec 001 research R3)
+- [X] T029 [P] [US2] Integration tests — actual coverage: `tests/integration/test_us2_reads.py` (Task 6, reviewed; fixed one real return-shape defect during review)
+- [X] T030 [P] [US2] Integration test — actual coverage: `tests/unit/test_session_resolution.py::test_non_football_league_is_refused_as_unsupported` (Task 3) plus `discover_leagues`' `is_supported` field (Task 9a) — `list_leagues` lists non-football leagues, other tools refuse them
+- [X] T031 [P] [US2] Regression test — actual coverage: `tests/integration/test_us2_reads.py::test_availability_invariant_holds_deep_into_draft` (Task 6, reviewer independently constructed an adversarial midraft-vs-postdraft scenario and confirmed it catches a real regression)
 
 ### Implementation for User Story 2
 
-- [ ] T032 [P] [US2] Port `get_league_info` and `list_teams` to `src/yahoo_fantasy_mcp/tools_read.py`, parameterized by `league_key`
-- [ ] T033 [P] [US2] Port `get_roster` and `get_standings` to `src/yahoo_fantasy_mcp/tools_read.py` (`team_key` optional, defaults to caller's team)
-- [ ] T034 [US2] Port `get_draft_results` and `get_available_players` to `src/yahoo_fantasy_mcp/tools_read.py`, deriving `total_expected_picks` from league settings rather than a global env var
-- [ ] T035 [US2] Register all read tools with correct annotations in `src/yahoo_fantasy_mcp/server.py`
-- [ ] T036 [US2] Delete the now-unused single-tenant tool bodies and `ServerContext` from `src/yahoo_fantasy_mcp/server.py` (Principle IV — no dead code implying it's live)
+- [X] T032 [P] [US2] Port `get_league_info` and `list_teams` to `src/yahoo_fantasy_mcp/tools_read.py`, parameterized by `league_key`
+- [X] T033 [P] [US2] Port `get_roster` and `get_standings` to `src/yahoo_fantasy_mcp/tools_read.py` (`team_key` optional, defaults to caller's team)
+- [X] T034 [US2] Port `get_draft_results` and `get_available_players` to `src/yahoo_fantasy_mcp/tools_read.py`, deriving `total_expected_picks` from league settings rather than a global env var
+- [X] T035 [US2] Register all read tools with correct annotations in `src/yahoo_fantasy_mcp/server.py`
+- [X] T036 [US2] Delete the now-unused single-tenant tool bodies and `ServerContext` from `src/yahoo_fantasy_mcp/server.py` (Principle IV — no dead code implying it's live)
 
 **Checkpoint**: US1 + US2 both work. Run quickstart V4. Read-only product is complete and shippable.
 
@@ -144,21 +152,21 @@ Implementation proceeds to **mock-validated** tier now. **Integration-validated*
 
 ### Tests for User Story 3 ⚠️ write first, confirm failing
 
-- [ ] T037 [P] [US3] Unit tests for the confirm rail in `tests/unit/test_confirm.py` — covers all five refusals from quickstart V6: unknown token, replay, expiry, wrong user, precondition drift (FR-020, FR-021, FR-023)
-- [ ] T038 [P] [US3] Unit test in `tests/unit/test_confirm_storage.py` — only the token **hash** is persisted; the raw token never appears in the DB (data-model.md)
-- [ ] T039 [P] [US3] Unit test in `tests/unit/test_confirm_atomicity.py` — consumption and dispatch share one transaction; a simulated crash mid-write leaves the token unusable, never reusable
-- [ ] T040 [P] [US3] Integration test in `tests/integration/test_propose_lineup.py` — propose issues no write; confirm dispatches exactly one `change_positions` call
-- [ ] T041 [P] [US3] Contract test in `tests/contract/test_tool_annotations.py` — asserts the full annotation matrix: reads and `propose_*` non-destructive, `confirm_action` destructive (FR-024, research R9)
+- [X] T037 [P] [US3] Unit tests for the confirm rail — actual coverage: `tests/unit/test_confirm.py` (Task 7). All five refusals present and independently mutation-tested twice over — once by the implementer (wrong-user, expiry guards) and once by the controller (precondition-drift, atomic-consume guards) — every mutation produced the expected test failure.
+- [X] T038 [P] [US3] Unit test — actual coverage: `tests/unit/test_confirm.py::TestTokenStorage::test_raw_token_is_never_stored` (Task 7)
+- [X] T039 [P] [US3] Unit test — actual coverage: `tests/unit/test_store.py::test_second_consume_fails` plus the `mark_status` race-condition fix and its regression test (Task 7, fix round 1) — atomicity holds; "crash mid-write" specifically is not simulated (SQLite's own transaction commit is trusted, not independently fault-injected)
+- [ ] T040 [P] [US3] **Not literally done — correctly, given T046 is blocked.** No test dispatches a real `change_positions` call, because no code does (T046/gate G3). What IS tested: propose issues no write, and confirm dispatches through the `LineupWriter` seam exactly once, ending in `WriteNotApprovedError` (`tests/integration/test_us3_write.py`, Task 8) — the same guarantee, against the blocked-writer stand-in. Re-verify against a real `change_positions` call once T046 unblocks.
+- [X] T041 [P] [US3] Contract test — actual coverage: `tests/contract/test_tool_annotations.py` (Task 9b) — this one exists at exactly the filename specified. All 10 registered tools verified: reads + `propose_set_lineup` non-destructive, `confirm_action` the sole destructive tool.
 
 ### Implementation for User Story 3
 
-- [ ] T042 [US3] Implement proposal creation in `src/yahoo_fantasy_mcp/confirm.py` — `secrets.token_urlsafe(32)`, store SHA-256 hash, TTL from config, snapshot preconditions
-- [ ] T043 [US3] Implement `verify_and_consume()` in `src/yahoo_fantasy_mcp/confirm.py` — enforces the six checks from data-model.md atomically; returns `INVALID_CONFIRMATION` identically for unknown-token and wrong-user (contracts: must not reveal token existence)
-- [ ] T044 [US3] Implement precondition re-verification for `set_lineup` in `src/yahoo_fantasy_mcp/confirm.py` — compares current roster/slots against the snapshot
-- [ ] T045 [US3] Implement `propose_set_lineup` in `src/yahoo_fantasy_mcp/tools_write.py` per contracts, including `warnings` (e.g. bye week) surfaced pre-confirmation
+- [X] T042 [US3] Implement proposal creation in `src/yahoo_fantasy_mcp/confirm.py` — `secrets.token_urlsafe(32)`, store SHA-256 hash, TTL from config, snapshot preconditions
+- [X] T043 [US3] Implement `verify_and_consume()` in `src/yahoo_fantasy_mcp/confirm.py` — enforces the six checks from data-model.md atomically; returns `INVALID_CONFIRMATION` identically for unknown-token and wrong-user (contracts: must not reveal token existence)
+- [X] T044 [US3] Implement precondition re-verification for `set_lineup` in `src/yahoo_fantasy_mcp/confirm.py` — compares current roster/slots against the snapshot
+- [X] T045 [US3] Implement `propose_set_lineup` in `src/yahoo_fantasy_mcp/tools_write.py` per contracts, including `warnings` (e.g. bye week) surfaced pre-confirmation
 - [ ] T046 [US3] 🚧 **BLOCKED ON G3 — do not implement in the mock-validated pass.** Add `set_lineup` write dispatch in `src/yahoo_fantasy_mcp/client.py` via `Team.change_positions`. The `time_frame`/`modified_lineup` shape is unverified (research R5); constitution Principle I forbids implementing against a guessed signature. Verify against a real team, then write. Until then `confirm_action` dispatches through a seam that raises `WRITE_NOT_APPROVED`
-- [ ] T047 [US3] Implement `confirm_action` in `src/yahoo_fantasy_mcp/tools_write.py` — the single write path; annotated `destructiveHint=true`
-- [ ] T048 [US3] Implement `WRITE_NOT_APPROVED` handling in `src/yahoo_fantasy_mcp/tools_write.py` — distinguishes missing Yahoo write scope from an invalid request (FR-025)
+- [X] T047 [US3] Implement `confirm_action` in `src/yahoo_fantasy_mcp/tools_write.py` — the single write path; annotated `destructiveHint=true`
+- [X] T048 [US3] Implement `WRITE_NOT_APPROVED` handling in `src/yahoo_fantasy_mcp/tools_write.py` — distinguishes missing Yahoo write scope from an invalid request (FR-025)
 
 **Checkpoint**: US3 works. Run quickstart V5 and **V6 with host tool-approval prompts disabled** — that is what proves the guarantee lives in the server, not the host UI.
 

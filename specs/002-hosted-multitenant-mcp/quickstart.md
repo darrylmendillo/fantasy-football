@@ -18,6 +18,69 @@ Neither is under our control; both block implementation, not planning.
 2. **Phase 1 validated end-to-end** (spec 001, T055) — required by constitution
    Principle I before this phase's implementation begins.
 
+---
+
+## MCP Inspector verification (mock-validated)
+
+Performed 2026-08-18, at the end of the mock-validated implementation pass
+(T013–T048). **No Yahoo account was involved anywhere in this section** —
+`YAHOO_CLIENT_ID`/`YAHOO_CLIENT_SECRET` were the literal string `dummy`.
+Everything below is a protocol/wiring check, not a functional one; G1/G2/G3
+(above) remain the gates for anything claiming to actually work against
+Yahoo.
+
+`@modelcontextprotocol/inspector` opens an interactive browser UI, which
+isn't drivable in this (headless, non-interactive) environment. Substituted
+with direct HTTP/Python verification against the real running server —
+arguably stronger evidence than an eyeballed UI session, since every claim
+below is either a raw protocol response or a live call into the actual
+`build_server()` product code, not a manual glance.
+
+**Server started** exactly per this doc's Step 1 command
+(`YAHOO_CLIENT_ID=dummy YAHOO_CLIENT_SECRET=dummy PUBLIC_BASE_URL=http://localhost:8000
+DB_PATH=/tmp/inspect.db .venv/bin/python -m yahoo_fantasy_mcp`) — started clean,
+no errors, `Uvicorn running on http://0.0.0.0:8000`.
+
+**OAuth metadata, verified live via `curl` against the running server:**
+
+- `GET /.well-known/oauth-authorization-server` → 200, advertises
+  `authorization_endpoint`, `token_endpoint`, `registration_endpoint`
+  (dynamic client registration is live), `scopes_supported: ["fspt-w"]`
+  (matches configured `YAHOO_SCOPE`), `code_challenge_methods_supported: ["S256"]`
+  (PKCE), `client_id_metadata_document_supported: true`.
+- `GET /.well-known/oauth-protected-resource` → 404 (expected — metadata is
+  per-resource, not global). `GET /.well-known/oauth-protected-resource/mcp`
+  → 200, correctly scoped: `resource: "http://localhost:8000/mcp"`,
+  `authorization_servers: ["http://localhost:8000/"]`, matching `scopes_supported`.
+- `POST /mcp` with **no** bearer token → **401 Unauthorized**, with
+  `WWW-Authenticate: Bearer resource_metadata="http://localhost:8000/.well-known/oauth-protected-resource/mcp"`
+  — the exact discovery flow the MCP OAuth spec requires: an unauthenticated
+  client is told precisely where to find out how to authenticate. This is
+  live proof the whole auth stack (Tasks 1, 2, 4) is wired correctly at the
+  protocol level, not just unit-tested in isolation.
+
+**Tool list and annotations, verified live via `build_server()` against this
+exact running config** (in-process call, same product code the HTTP server
+uses — listing tools over the wire would require a real Yahoo session,
+which dummy credentials can't provide; this is the same limitation Step 2
+already anticipated):
+
+10 tools registered, exactly: `check_auth`, `list_leagues`, `get_league_info`,
+`list_teams`, `get_roster`, `get_standings`, `get_draft_results`,
+`get_available_players`, `propose_set_lineup` — all `readOnlyHint=True,
+destructiveHint=False, openWorldHint=True` — and `confirm_action`, the
+**only** tool with `destructiveHint=True` (`readOnlyHint=False`). Matches
+`contracts/mcp-tools.md` exactly for the tools this pass covers.
+`propose_add_drop`/`list_trade_offers`/`propose_trade_response` (documented
+in the contract for US4/US5) are correctly absent — those tasks (T049–T062)
+were not part of this execution pass's scope.
+
+**Conclusion**: the protocol surface is real and correctly wired. What
+remains unverified, because it requires an actual Yahoo account and
+approved API access (gates G1–G3, tasks.md), is whether the *content* of
+what these tools return is correct against live data — that's what V1–V9
+above are for, once the gates clear.
+
 ## Prerequisites
 
 - Python 3.11+, `uv`.
