@@ -1544,7 +1544,619 @@ git commit -m "feat(002): propose_set_lineup + confirm_action with blocked dispa
 
 ---
 
+### Task 9a: Real Yahoo game factory and league discovery
+
+> **Why this task exists**: Task 3's review found `discover_leagues(game_factory, identity) -> list[LeagueSummary]` was promised in Task 3's own Interfaces block but never implemented anywhere in the original 10-task plan — only a test fake (`_FakeGameFactory`) existed. Investigating further revealed the gap was bigger than one function: no task built the REAL `game_factory` that `resolve_league_context` (Task 3) depends on either. This task closes both gaps. Ruled in the SDD ledger (Task 3 review) to land here rather than block Tasks 4-8, none of which needed it.
+>
+> **Design verified against installed `yahoo_fantasy_api` source before writing this task** (not guessed — constitution Principle IV): `Game.to_league(league_id)` (`yahoo_fantasy_api/game.py`) constructs `League(self.sc, league_id, handler=self.yhandler)` — it never references `self.code`, and `League.__init__` takes no game-code parameter at all. So a single `Game` object, constructed with any code, can build a `League` for any `league_id` regardless of that league's actual sport. Separately, `Game.league_ids(game_codes=None, ...)` accepts an explicit `game_codes` filter — passing `None` returns league IDs across **every** sport the user plays, in one call, not just the code the `Game` was constructed with. And `League.settings()` returns a dict that includes `game_code` directly (confirmed against the method's own documented example: `{'league_key': '398.l.10372', ..., 'game_code': 'mlb', 'season': '2020', ...}`). Together this means: one `Game`, one `league_ids(game_codes=None)` call, then one `to_league(key).settings()` per discovered league — no per-sport looping needed.
+
+**Files:**
+- Modify: `src/yahoo_fantasy_mcp/session.py`
+- Test: `tests/unit/test_discover_leagues.py`
+
+**Interfaces:**
+- Consumes: `RequestIdentity`, `LeagueSummary`, `YahooSessionAdapter` (all already in `session.py`).
+- Produces:
+  - `YahooGameFactory` class — `.discover_league_ids(identity) -> list[str]`, `.build(identity, league_key) -> Any` (a real `yahoo_fantasy_api.League`). `game_cls` is constructor-injectable for testing (defaults to the real `yahoo_fantasy_api.Game`).
+  - `discover_leagues(game_factory, identity) -> list[LeagueSummary]` — the function Task 3 promised.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/unit/test_discover_leagues.py
+"""Task 9a — the real game factory and multi-sport league discovery.
+
+Design verified against installed yahoo_fantasy_api source (see plan Task 9a
+header): Game.to_league() never references its own game code, and
+Game.league_ids(game_codes=None) spans every sport in one call. So these
+tests fake a single Game object returning leagues across two different
+sports from one league_ids() call — proving discover_leagues does NOT need
+to loop over game codes, and that non-football leagues are surfaced (FR-008:
+listed, not hidden) rather than silently dropped.
+"""
+
+from __future__ import annotations
+
+from yahoo_fantasy_mcp.session import (
+    LeagueSummary,
+    RequestIdentity,
+    YahooGameFactory,
+    discover_leagues,
+)
+
+
+class _FakeLeague:
+    def __init__(self, league_key: str, name: str, game_code: str, season: str, team_key: str):
+        self._settings = {
+            "league_key": league_key,
+            "name": name,
+            "game_code": game_code,
+            "season": season,
+        }
+        self._team_key = team_key
+
+    def settings(self) -> dict:
+        return dict(self._settings)
+
+    def team_key(self) -> str:
+        return self._team_key
+
+
+_LEAGUES_BY_KEY = {
+    "461.l.111": _FakeLeague("461.l.111", "A League", "nfl", "2026", "461.l.111.t.1"),
+    "398.l.222": _FakeLeague("398.l.222", "B League", "mlb", "2026", "398.l.222.t.4"),
+}
+
+
+class _FakeGame:
+    """Stands in for yahoo_fantasy_api.Game. Records how it was called so
+    tests can assert discover_league_ids passes game_codes=None."""
+
+    def __init__(self, sc, code):
+        self.sc = sc
+        self.code = code
+        self.league_ids_calls: list[dict] = []
+
+    def league_ids(self, game_codes=None):
+        self.league_ids_calls.append({"game_codes": game_codes})
+        return list(_LEAGUES_BY_KEY.keys())
+
+    def to_league(self, league_key: str):
+        return _LEAGUES_BY_KEY[league_key]
+
+
+def _identity() -> RequestIdentity:
+    return RequestIdentity(sub="sub-a", access_token="tok-a")
+
+
+def test_discover_league_ids_spans_all_sports_in_one_call():
+    """Proves no per-sport looping happens — game_codes=None is what makes
+    a single call return every sport."""
+    factory = YahooGameFactory(game_cls=_FakeGame)
+    ids = factory.discover_league_ids(_identity())
+    assert set(ids) == {"461.l.111", "398.l.222"}
+
+
+def test_build_constructs_the_requested_league():
+    factory = YahooGameFactory(game_cls=_FakeGame)
+    league = factory.build(_identity(), "398.l.222")
+    assert league.settings()["name"] == "B League"
+
+
+def test_discover_leagues_includes_non_football_with_is_supported_false():
+    """FR-008: unsupported leagues are listed, not hidden."""
+    factory = YahooGameFactory(game_cls=_FakeGame)
+    summaries = discover_leagues(factory, _identity())
+    by_key = {s.league_key: s for s in summaries}
+
+    assert by_key["461.l.111"] == LeagueSummary(
+        league_key="461.l.111", name="A League", sport="nfl",
+        season=2026, is_supported=True, team_key="461.l.111.t.1", team_name=None,
+    )
+    assert by_key["398.l.222"] == LeagueSummary(
+        league_key="398.l.222", name="B League", sport="mlb",
+        season=2026, is_supported=False, team_key="398.l.222.t.4", team_name=None,
+    )
+
+
+def test_each_users_token_produces_an_independently_constructed_game():
+    """Tenant isolation at the source: two identities must never share a
+    Game/session (FR-005)."""
+    factory = YahooGameFactory(game_cls=_FakeGame)
+    game_a = factory._game(RequestIdentity(sub="a", access_token="tok-a"))
+    game_b = factory._game(RequestIdentity(sub="b", access_token="tok-b"))
+    assert game_a.sc.session.headers["Authorization"] != game_b.sc.session.headers["Authorization"]
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `.venv/bin/pytest tests/unit/test_discover_leagues.py -v`
+Expected: FAIL — `ImportError: cannot import name 'YahooGameFactory' from 'yahoo_fantasy_mcp.session'`
+
+- [ ] **Step 3: Write minimal implementation**
+
+Append to `src/yahoo_fantasy_mcp/session.py`:
+
+```python
+# Game code is a required constructor argument of yahoo_fantasy_api.Game,
+# but functionally irrelevant to what this module uses Game for: to_league()
+# never references it, and league_ids(game_codes=None) below deliberately
+# overrides any sport restriction it might otherwise imply. "nfl" here is a
+# construction requirement, not a behavioral filter (verified against
+# yahoo_fantasy_api source — see this task's plan header).
+_GAME_CONSTRUCTION_CODE = "nfl"
+
+
+class YahooGameFactory:
+    """Builds real yahoo_fantasy_api Game/League objects from a per-request
+    identity. `game_cls` is injectable for testing without a live Yahoo call
+    (mock-validated tier); defaults to the real yahoo_fantasy_api.Game.
+    """
+
+    def __init__(self, game_cls: Any = None) -> None:
+        self._game_cls = game_cls
+
+    def _resolve_game_cls(self) -> Any:
+        if self._game_cls is not None:
+            return self._game_cls
+        from yahoo_fantasy_api import Game  # lazy: unit tests never require it
+
+        return Game
+
+    def _game(self, identity: RequestIdentity) -> Any:
+        adapter = YahooSessionAdapter(identity.access_token)
+        return self._resolve_game_cls()(adapter, _GAME_CONSTRUCTION_CODE)
+
+    def discover_league_ids(self, identity: RequestIdentity) -> list[str]:
+        return self._game(identity).league_ids(game_codes=None)
+
+    def build(self, identity: RequestIdentity, league_key: str) -> Any:
+        return self._game(identity).to_league(league_key)
+
+
+def discover_leagues(game_factory: Any, identity: RequestIdentity) -> list[LeagueSummary]:
+    """All Yahoo fantasy leagues the caller belongs to, across every sport
+    (FR-009). Sport-gating to football-only happens downstream, in
+    require_supported_sport / resolve_league_context — this function's job
+    is to list everything, not filter it (FR-008: unsupported leagues are
+    shown, not hidden).
+
+    team_name is deliberately left None: populating it needs an extra
+    teams() call per discovered league, and no tested guarantee depends on
+    it yet (YAGNI — Principle V).
+    """
+    summaries = []
+    for league_key in game_factory.discover_league_ids(identity):
+        league = game_factory.build(identity, league_key)
+        settings = league.settings()
+        sport = settings["game_code"]
+        summaries.append(
+            LeagueSummary(
+                league_key=settings["league_key"],
+                name=settings["name"],
+                sport=sport,
+                season=int(settings["season"]),
+                is_supported=(sport == SUPPORTED_GAME_CODE),
+                team_key=league.team_key(),
+                team_name=None,
+            )
+        )
+    return summaries
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `.venv/bin/pytest tests/unit/test_discover_leagues.py -v && .venv/bin/pytest tests/ -q && .venv/bin/ruff check src/ tests/`
+Expected: 5 passed; full suite still green; ruff clean.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/yahoo_fantasy_mcp/session.py tests/unit/test_discover_leagues.py
+git commit -m "feat(002): real Yahoo game factory and multi-sport league discovery (T015 gap closure)"
+```
+
+---
+
+### Task 9b: Tool registration, per-request resolution, and annotation contract
+
+> **Design verified before writing this task** (constitution Principle IV — no guessing): traced `fastmcp/server/auth/oauth_proxy/proxy.py`'s `load_access_token` end to end. `self._token_validator: TokenVerifier = token_verifier` (line 612) is assigned directly from the `token_verifier` constructor argument — i.e. Task 1's `YahooTokenVerifier` instance. `load_access_token` calls `validated = await self._token_validator.verify_token(verification_token)` (line 1848) **fresh on every request**, not just at initial token exchange. Since `YahooTokenVerifier.verify_token` already returns `AccessToken(claims={"sub": str(sub)}, ...)`, this means **`get_access_token().claims["sub"]` and `get_access_token().token` are both already correctly populated on every live request, with zero changes needed to Task 1 or Task 2's already-shipped, already-reviewed code.** No `_extract_upstream_claims` override, no extra per-request userinfo call — the plumbing already works.
+
+**Files:**
+- Modify: `src/yahoo_fantasy_mcp/server.py`
+- Test: `tests/contract/test_tool_annotations.py`, `tests/integration/test_tool_wiring.py`
+
+**Interfaces:**
+- Consumes: everything above, including Task 9a's `YahooGameFactory`/`discover_leagues`.
+- Produces: `build_server(store, config) -> FastMCP`; `register_tools(mcp_server, store, config) -> None` as a thin wrapper over the same registration body (so `__main__.py`, already written in Task 4, works unchanged).
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/contract/test_tool_annotations.py
+"""Task 9b — annotation contract (FR-024, research R9).
+
+Both Claude and ChatGPT drive their native confirmation UI from these
+annotations, and OpenAI's Apps SDK requires all three for submission. They
+are a UX layer over the server-side guarantee (Task 7), never a
+replacement for it — which is why propose_* is non-destructive: the host
+prompt belongs on the call that actually writes.
+"""
+
+from __future__ import annotations
+
+import anyio
+import pytest
+
+from yahoo_fantasy_mcp.config import ServerConfig
+from yahoo_fantasy_mcp.server import build_server
+from yahoo_fantasy_mcp.store import Store
+
+READ_ONLY_TOOLS = {
+    "check_auth", "list_leagues", "get_league_info", "list_teams",
+    "get_roster", "get_standings", "get_draft_results",
+    "get_available_players", "propose_set_lineup",
+}
+DESTRUCTIVE_TOOLS = {"confirm_action"}
+
+
+@pytest.fixture
+def tools():
+    config = ServerConfig(
+        client_id="cid", client_secret="cs", public_base_url="https://example.test",
+        port=8000, db_path=":memory:", proposal_ttl_seconds=300,
+        yahoo_scope="fspt-w", poll_interval_seconds=5,
+    )
+    server = build_server(Store(":memory:"), config)
+    return {t.name: t for t in anyio.run(server.list_tools)}
+
+
+def test_every_tool_declares_all_three_hints(tools):
+    for name, tool in tools.items():
+        ann = tool.annotations
+        assert ann is not None, f"{name} has no annotations"
+        assert ann.readOnlyHint is not None, f"{name} missing readOnlyHint"
+        assert ann.destructiveHint is not None, f"{name} missing destructiveHint"
+        assert ann.openWorldHint is not None, f"{name} missing openWorldHint"
+
+
+def test_read_and_propose_tools_are_non_destructive(tools):
+    for name in READ_ONLY_TOOLS & set(tools):
+        assert tools[name].annotations.readOnlyHint is True, name
+        assert tools[name].annotations.destructiveHint is False, name
+
+
+def test_confirm_action_is_destructive(tools):
+    for name in DESTRUCTIVE_TOOLS & set(tools):
+        assert tools[name].annotations.readOnlyHint is False, name
+        assert tools[name].annotations.destructiveHint is True, name
+
+
+def test_no_tool_offers_a_confirmation_bypass(tools):
+    """FR-017: there is no single-call write path, by construction."""
+    for name, tool in tools.items():
+        params = set(getattr(tool, "parameters", {}).get("properties", {}))
+        assert "force" not in params, name
+        assert "skip_confirm" not in params, name
+
+
+def test_all_nine_tools_are_registered(tools):
+    expected = READ_ONLY_TOOLS | DESTRUCTIVE_TOOLS
+    assert expected.issubset(set(tools)), sorted(expected - set(tools))
+```
+
+```python
+# tests/integration/test_tool_wiring.py
+"""Task 9b — the resolution glue itself: identity -> leagues -> a scoped
+client, wired without going through a live FastMCP request. Exercises the
+same functions the registered tools call, directly.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from yahoo_fantasy_mcp.errors import LeagueNotAccessibleError
+from yahoo_fantasy_mcp.server import resolve_request_league_context
+from yahoo_fantasy_mcp.session import LeagueSummary, RequestIdentity
+
+
+class _FakeGameFactory:
+    def __init__(self, leagues: list[LeagueSummary]):
+        self._leagues = leagues
+
+    def build(self, identity, league_key):
+        return object()
+
+
+def _leagues():
+    return [
+        LeagueSummary("461.l.111", "A League", "nfl", 2026, True, "461.l.111.t.1", None),
+    ]
+
+
+def test_resolve_request_league_context_scopes_to_the_right_league():
+    identity = RequestIdentity(sub="sub-a", access_token="tok")
+    ctx = resolve_request_league_context(
+        _FakeGameFactory(_leagues()), identity, "461.l.111", _leagues()
+    )
+    assert ctx.league_key == "461.l.111"
+
+
+def test_resolve_request_league_context_refuses_a_foreign_league():
+    identity = RequestIdentity(sub="sub-a", access_token="tok")
+    with pytest.raises(LeagueNotAccessibleError):
+        resolve_request_league_context(
+            _FakeGameFactory(_leagues()), identity, "999.l.999", _leagues()
+        )
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `.venv/bin/pytest tests/contract/test_tool_annotations.py tests/integration/test_tool_wiring.py -v`
+Expected: FAIL — `ImportError: cannot import name 'build_server'`. Create `tests/contract/__init__.py` if the directory is new.
+
+- [ ] **Step 3: Write minimal implementation**
+
+Append to `src/yahoo_fantasy_mcp/server.py`. This wires every prior task's output together. Read `tools_read.py`, `tools_write.py`, `session.py`, and `confirm.py`'s public functions first — this step calls all of them, matching their real (already-shipped) signatures, not the sketches from earlier tasks.
+
+```python
+from mcp.types import ToolAnnotations
+
+from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_access_token
+
+from yahoo_fantasy_mcp.confirm import create_proposal
+from yahoo_fantasy_mcp.errors import AuthRequiredError, YahooFantasyError
+from yahoo_fantasy_mcp.session import (
+    LeagueContext,
+    RequestIdentity,
+    YahooGameFactory,
+    discover_leagues,
+    require_league_membership,
+    require_supported_sport,
+    resolve_identity,
+)
+from yahoo_fantasy_mcp.tools_read import (
+    tool_check_auth, tool_get_available_players, tool_get_draft_results,
+    tool_get_league_info, tool_get_roster, tool_get_standings,
+    tool_list_leagues, tool_list_teams,
+)
+from yahoo_fantasy_mcp.tools_write import (
+    UnapprovedLineupWriter, tool_confirm_action, tool_propose_set_lineup,
+)
+
+READ_ANNOTATIONS = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True)
+WRITE_ANNOTATIONS = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=True)
+
+# Roster spots per team. Only affects the is_complete flag on draft results
+# (Draft.is_complete), not availability-derivation correctness (spec 001
+# research). ServerConfig has no roster_size field (verified: dropped when
+# the config was rewritten for multi-tenancy) — not yet per-server-
+# configurable; add a ServerConfig field if a real deployment ever needs a
+# non-16-spot league. YAGNI until then.
+DEFAULT_ROSTER_SIZE = 16
+
+
+def resolve_request_league_context(
+    game_factory: Any, identity: RequestIdentity, league_key: str, leagues: list
+) -> LeagueContext:
+    """Shared by every league-scoped tool: validate membership and sport
+    before building any Yahoo object (Task 3's guarantee), then wrap the
+    result as a usable client.
+
+    total_expected_picks is computed here (num_teams * DEFAULT_ROSTER_SIZE)
+    rather than left at Task 3's placeholder 0 — this is the first place a
+    real value is actually needed (get_draft_results/get_available_players,
+    both league-scoped tools that call through this function).
+    """
+    require_league_membership(league_key, {lg.league_key for lg in leagues})
+    match = next(lg for lg in leagues if lg.league_key == league_key)
+    require_supported_sport(match.sport)
+    league = game_factory.build(identity, league_key)
+    from yahoo_fantasy_mcp.client import YahooClient, YahooFantasyApiDataSource
+
+    client = YahooClient(YahooFantasyApiDataSource(league, match.team_key or ""))
+    num_teams = client.get_league_info().num_teams
+    return LeagueContext(
+        league_key=league_key, team_key=match.team_key or "",
+        client=client, total_expected_picks=num_teams * DEFAULT_ROSTER_SIZE,
+    )
+
+
+def _current_identity(store: Any) -> RequestIdentity:
+    """Resolve the calling user from the live FastMCP access token.
+    get_access_token().claims["sub"] and .token are populated on every
+    request by YahooTokenVerifier.verify_token — see this task's plan
+    header for the verified trace through OAuthProxy.load_access_token.
+    """
+    token = get_access_token()
+    if token is None or not (token.claims or {}).get("sub"):
+        raise AuthRequiredError()
+    return resolve_identity(store, token.token, token.claims["sub"])
+
+
+def _record(store: Any, sub: str | None, tool_name: str, outcome: str) -> None:
+    if sub is not None:
+        record_tool_usage(store, sub, tool_name, outcome)
+
+
+def build_server(store: Any, config: Any) -> FastMCP:
+    """Every tool follows the same three-part shape, shown in full for the
+    two structurally different cases below (an unscoped read, a
+    league-scoped read) rather than a generic decorator — usage recording
+    needs the resolved `sub`, which isn't known until identity resolution
+    has already run inside the body, so a wrap-from-outside decorator
+    doesn't actually fit here:
+
+        1. resolve identity (and league context, if this tool is
+           league-scoped) — YahooFantasyError subclasses raised here are
+           caught and translated, never left to become a raw traceback
+        2. call the matching pure tool_* function
+        3. record usage (outcome "ok" on success, "refused" on a caught
+           YahooFantasyError) and return
+
+    No caching of identity/leagues/context across calls — everything is
+    resolved fresh, every request, which is what keeps two concurrent
+    users' data from ever crossing (FR-005).
+    """
+    mcp_server = FastMCP("yahoo-fantasy-mcp")
+    game_factory = YahooGameFactory()
+
+    @mcp_server.tool(
+        name="check_auth",
+        description=(
+            "Report whether this session's Yahoo authorization is currently "
+            "valid and how long it remains so. Never returns a token or any "
+            "credential value."
+        ),
+        annotations=READ_ANNOTATIONS,
+    )
+    def check_auth() -> dict:
+        sub = None
+        try:
+            identity = _current_identity(store)
+            sub = identity.sub
+            result = tool_check_auth(identity, expires_in_seconds=3600)
+            _record(store, sub, "check_auth", "ok")
+            return result
+        except YahooFantasyError as exc:
+            _record(store, sub, "check_auth", "refused")
+            return exc.to_dict()
+
+    @mcp_server.tool(
+        name="list_leagues",
+        description="All Yahoo fantasy leagues the caller belongs to, across every sport.",
+        annotations=READ_ANNOTATIONS,
+    )
+    def list_leagues() -> list[dict]:
+        sub = None
+        try:
+            identity = _current_identity(store)
+            sub = identity.sub
+            leagues = discover_leagues(game_factory, identity)
+            result = tool_list_leagues(leagues)
+            _record(store, sub, "list_leagues", "ok")
+            return result
+        except YahooFantasyError as exc:
+            _record(store, sub, "list_leagues", "refused")
+            return exc.to_dict()
+
+    @mcp_server.tool(
+        name="get_roster",
+        description="A team's current roster, defaulting to the caller's own team.",
+        annotations=READ_ANNOTATIONS,
+    )
+    def get_roster(league_key: str, team_key: str | None = None) -> dict:
+        """Representative league-scoped read tool — every other league-scoped
+        read tool (get_league_info, list_teams, get_standings,
+        get_draft_results, get_available_players) follows this identical
+        three-step shape, differing only in which discover_leagues -> ctx ->
+        tool_get_*/tool_list_* call is made and which tool_* function's
+        extra parameters (positions, week, etc.) get threaded through.
+        """
+        sub = None
+        try:
+            identity = _current_identity(store)
+            sub = identity.sub
+            leagues = discover_leagues(game_factory, identity)
+            ctx = resolve_request_league_context(game_factory, identity, league_key, leagues)
+            from yahoo_fantasy_mcp.tools_read import tool_get_roster
+
+            result = tool_get_roster(ctx.client, team_key or ctx.team_key)
+            _record(store, sub, "get_roster", "ok")
+            return result
+        except YahooFantasyError as exc:
+            _record(store, sub, "get_roster", "refused")
+            return exc.to_dict()
+
+    # get_league_info(league_key), list_teams(league_key),
+    # get_standings(league_key), get_draft_results(league_key),
+    # get_available_players(league_key, positions=None) all follow
+    # get_roster's exact shape above: resolve identity -> discover_leagues
+    # -> resolve_request_league_context(league_key) -> call the matching
+    # tool_get_*/tool_list_* function from tools_read.py with ctx.client
+    # (get_draft_results and get_available_players additionally need
+    # ctx.total_expected_picks — computed as
+    # ctx.client.get_league_info().num_teams * config's roster-size
+    # constant, since LeagueContext.total_expected_picks is currently a
+    # hardcoded 0 placeholder from Task 3, a gap to close here, not defer
+    # further) -> _record.
+    #
+    # propose_set_lineup(league_key, week, changes) and
+    # confirm_action(confirmation_token) additionally fetch a live
+    # current_roster via ctx.client.get_roster(ctx.team_key), mapped to
+    # {player_id: position}, immediately before both the propose call
+    # (initial snapshot) and the confirm call (fresh re-check, satisfying
+    # FR-021 drift detection) -- never reused or cached between the two.
+    # confirm_action is registered with lineup_writer=UnapprovedLineupWriter()
+    # (T046 stays blocked on gate G3 -- see tools_write.py's module
+    # docstring) and team=ctx.client (the LineupWriter Protocol's `team`
+    # parameter; UnapprovedLineupWriter ignores it, a future real
+    # implementation would not). Both are annotated per WRITE_ANNOTATIONS
+    # (confirm_action) / READ_ANNOTATIONS (propose_set_lineup — it changes
+    # nothing, per FR-017/research R9).
+
+    return mcp_server
+```
+
+**No `register_tools` function** — it existed in earlier tasks as a stand-in for this task's real output. `build_server(store, config) -> FastMCP` is the actual product: a fresh, fully-wired `FastMCP` instance. There is nothing to "register onto" an existing instance, and keeping a `register_tools` that only raised `NotImplementedError` would be exactly the kind of dead/speculative code Principle IV forbids. `__main__.py` (written in Task 4, before this gap was known) needs a small, in-scope update to match:
+
+```python
+# src/yahoo_fantasy_mcp/__main__.py — REPLACES Task 4's version
+"""HTTP entrypoint for the hosted multi-tenant server (spec 002, T019).
+
+Unlike spec 001's stdio entrypoint, this builds NO per-user state at start-up.
+There is no `build_context()` singleton: every user's Yahoo token arrives with
+their request and every league is resolved per call. Anything cached here
+would be shared across tenants.
+"""
+
+from __future__ import annotations
+
+from yahoo_fantasy_mcp.auth_proxy import build_auth_proxy
+from yahoo_fantasy_mcp.config import load_config
+from yahoo_fantasy_mcp.logging_utils import get_logger
+from yahoo_fantasy_mcp.server import build_server
+from yahoo_fantasy_mcp.store import Store
+
+logger = get_logger(__name__)
+
+
+def main() -> None:
+    config = load_config()
+    store = Store(config.db_path)
+    mcp_server = build_server(store, config)
+    mcp_server.auth = build_auth_proxy(config)
+    logger.info("starting yahoo-fantasy-mcp (http) on port %s", config.port)
+    mcp_server.run(transport="http", host="0.0.0.0", port=config.port)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+The only changes from Task 4's version: `from yahoo_fantasy_mcp.server import mcp, register_tools` becomes `from yahoo_fantasy_mcp.server import build_server`; `mcp.auth = ...` / `register_tools(mcp, store, config)` become `mcp_server = build_server(store, config)` / `mcp_server.auth = ...`; `mcp.run(...)` becomes `mcp_server.run(...)`. No test in the existing suite imports `mcp` or `register_tools` from `server.py` (confirmed — grep for both names across `tests/` before this task turns up nothing outside the files this task itself touches), so this rename breaks nothing already shipped.
+
+> **This Step 3 sketch is intentionally incomplete for the remaining 6 read tools and needs a full pass** — the pattern is mechanical (shown fully for `check_auth`, `list_leagues`, and `get_roster`; the write tools' `current_roster` handling is described precisely in the comment, not written out, since it's a direct application of the same three-step shape). **The dispatched implementer's job is to complete every tool following the shown pattern exactly**, verify each against its real `tool_*` function's actual signature (read `tools_read.py`/`tools_write.py` directly, do not guess). The `total_expected_picks` gap from Task 3 (hardcoded `0`) is already closed above, in `resolve_request_league_context` and the `DEFAULT_ROSTER_SIZE` constant — nothing further needed there.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `.venv/bin/pytest tests/ -q && .venv/bin/ruff check src/ tests/`
+Expected: all green, including both new test files.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/yahoo_fantasy_mcp/server.py src/yahoo_fantasy_mcp/__main__.py tests/contract/ tests/integration/test_tool_wiring.py
+git commit -m "feat(002): register all tools with live resolution and annotation contract (T026/T035/T041, US2/US3 wiring)"
+```
+
+---
+
 ### Task 9: Tool registration and annotation contract
+
+> **Superseded by Tasks 9a and 9b above**, added when Task 3's review surfaced that `discover_leagues` and the real `game_factory` were promised but never built anywhere in the original plan. This section is left in place only as the historical record of the original (incomplete) sketch; do not dispatch it — dispatch 9a then 9b instead.
 
 **Files:**
 - Modify: `src/yahoo_fantasy_mcp/server.py`
