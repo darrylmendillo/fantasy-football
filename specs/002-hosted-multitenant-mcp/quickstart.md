@@ -18,6 +18,112 @@ Neither is under our control; both block implementation, not planning.
 2. **Phase 1 validated end-to-end** (spec 001, T055) — required by constitution
    Principle I before this phase's implementation begins.
 
+---
+
+## MCP Inspector verification (mock-validated)
+
+Performed 2026-08-18, at the end of the mock-validated implementation pass
+(T013–T048). **No Yahoo account was involved anywhere in this section** —
+`YAHOO_CLIENT_ID`/`YAHOO_CLIENT_SECRET` were the literal string `dummy`.
+Everything below is a protocol/wiring check, not a functional one; G1/G2/G3
+(above) remain the gates for anything claiming to actually work against
+Yahoo.
+
+`@modelcontextprotocol/inspector`'s default `--web` mode opens an interactive
+browser UI, which isn't drivable in this (headless, non-interactive)
+environment. The first pass below substituted direct HTTP/Python
+verification against the real running server for that. A later pass (see
+"Genuine MCP Inspector CLI run" further down) used the package's actual
+`--cli` mode instead — the real Anthropic tool, not a substitute — once it
+was confirmed that mode exists and runs non-interactively.
+
+**Server started** exactly per this doc's Step 1 command
+(`YAHOO_CLIENT_ID=dummy YAHOO_CLIENT_SECRET=dummy PUBLIC_BASE_URL=http://localhost:8000
+DB_PATH=/tmp/inspect.db .venv/bin/python -m yahoo_fantasy_mcp`) — started clean,
+no errors, `Uvicorn running on http://0.0.0.0:8000`.
+
+**OAuth metadata, verified live via `curl` against the running server:**
+
+- `GET /.well-known/oauth-authorization-server` → 200, advertises
+  `authorization_endpoint`, `token_endpoint`, `registration_endpoint`
+  (dynamic client registration is live), `scopes_supported: ["fspt-w"]`
+  (matches configured `YAHOO_SCOPE`), `code_challenge_methods_supported: ["S256"]`
+  (PKCE), `client_id_metadata_document_supported: true`.
+- `GET /.well-known/oauth-protected-resource` → 404 (expected — metadata is
+  per-resource, not global). `GET /.well-known/oauth-protected-resource/mcp`
+  → 200, correctly scoped: `resource: "http://localhost:8000/mcp"`,
+  `authorization_servers: ["http://localhost:8000/"]`, matching `scopes_supported`.
+- `POST /mcp` with **no** bearer token → **401 Unauthorized**, with
+  `WWW-Authenticate: Bearer resource_metadata="http://localhost:8000/.well-known/oauth-protected-resource/mcp"`
+  — the exact discovery flow the MCP OAuth spec requires: an unauthenticated
+  client is told precisely where to find out how to authenticate. This is
+  live proof the whole auth stack (Tasks 1, 2, 4) is wired correctly at the
+  protocol level, not just unit-tested in isolation.
+
+**Tool list and annotations, verified live via `build_server()` against this
+exact running config** (in-process call, same product code the HTTP server
+uses — listing tools over the wire would require a real Yahoo session,
+which dummy credentials can't provide; this is the same limitation Step 2
+already anticipated):
+
+10 tools registered, exactly: `check_auth`, `list_leagues`, `get_league_info`,
+`list_teams`, `get_roster`, `get_standings`, `get_draft_results`,
+`get_available_players`, `propose_set_lineup` — all `readOnlyHint=True,
+destructiveHint=False, openWorldHint=True` — and `confirm_action`, the
+**only** tool with `destructiveHint=True` (`readOnlyHint=False`). Matches
+`contracts/mcp-tools.md` exactly for the tools this pass covers.
+`propose_add_drop`/`list_trade_offers`/`propose_trade_response` (documented
+in the contract for US4/US5) are correctly absent — those tasks (T049–T062)
+were not part of this execution pass's scope.
+
+**Conclusion**: the protocol surface is real and correctly wired. What
+remains unverified, because it requires an actual Yahoo account and
+approved API access (gates G1–G3, tasks.md), is whether the *content* of
+what these tools return is correct against live data — that's what V1–V9
+above are for, once the gates clear.
+
+### Genuine MCP Inspector CLI run (2026-08-19)
+
+Ran the real `@modelcontextprotocol/inspector` package (v2.2.0, fetched live
+via `npx -y @modelcontextprotocol/inspector`) in its `--cli` mode — a
+non-interactive mode the package documents explicitly for CI use
+(`--stored-auth-only`: "Never start interactive OAuth... Preferred for
+CI/non-interactive runs"). This supersedes nothing above; it adds a second,
+independent confirmation from the actual Anthropic tool rather than a
+hand-rolled equivalent.
+
+Server started identically to the 2026-08-18 run (dummy Yahoo credentials,
+same command). Command run against it:
+
+```bash
+npx -y @modelcontextprotocol/inspector --cli \
+  --server-url http://localhost:8000/mcp --transport http \
+  --method tools/list --stored-auth-only --format json
+```
+
+**Output:**
+```json
+{"error":{"code":"auth_required","message":"Error POSTing to endpoint: "}}
+```
+Exit code 3.
+
+This is the real inspector tool independently reaching the same conclusion
+the curl-based check above did: `tools/list` cannot proceed without a valid
+OAuth token, and the tool refuses to silently continue or fake one. It does
+**not** go further than the curl-based check — `tools/list` still cannot
+actually be listed over the wire, because that requires a real Yahoo
+consent flow, which dummy credentials cannot complete (same gate G1–G3
+limitation noted throughout this document). Getting an authenticated
+`tools/list` via this same command is the natural first live check once
+gate G1 clears — swap `--stored-auth-only` for a real interactive login
+(drop that flag, add `--client-id`/`--client-secret` if using a static
+client) and rerun.
+
+Repeatable as `scripts/verify-mcp-protocol.sh` — starts the server with
+dummy credentials, re-runs every check above (OAuth metadata, unauthenticated
+401, and the real inspector `--cli` `auth_required` check), and tears the
+server down on exit.
+
 ## Prerequisites
 
 - Python 3.11+, `uv`.
@@ -196,6 +302,17 @@ sqlite3 <db> ".tables"         # users, usage_events, proposals present
 Confirm: restart preserves connected users (tokens survive); pending proposals
 either survive restart or fail closed as expired — **never** silently succeed
 after a restart; logs contain no token-shaped strings.
+
+### ⚠️ Do not rotate `YAHOO_CLIENT_SECRET` without a re-auth plan
+
+FastMCP's `OAuthProxy` stores every user's Yahoo token in an encrypted store
+whose location/encryption key is derived from `YAHOO_CLIENT_SECRET`. Rotating
+that secret therefore silently orphans every currently-stored session at
+once — nobody is notified, and affected users will simply start seeing
+`AUTH_REQUIRED`/`AUTH_EXPIRED` the next time they call a tool, with no
+indication that a server-side secret rotation was the cause. Do not rotate
+`YAHOO_CLIENT_SECRET` unless you are prepared for every connected user to
+re-authenticate from scratch.
 
 ---
 

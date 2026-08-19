@@ -11,11 +11,18 @@ from yahoo_fantasy_mcp.errors import (
     AuthExpiredError,
     AuthRequiredError,
     ErrorCode,
+    InvalidConfirmationError,
     LeagueNotAccessibleError,
     LeagueNotProvisionedError,
+    PreconditionsChangedError,
+    ProposalAlreadyUsedError,
+    ProposalExpiredError,
     RateLimitedError,
+    SportNotSupportedError,
+    TradeInitiationNotSupportedError,
     UnsupportedDraftTypeError,
     UpstreamError,
+    WriteNotApprovedError,
     YahooFantasyError,
 )
 from yahoo_fantasy_mcp.logging_utils import get_logger, mask_secrets
@@ -29,8 +36,14 @@ FAKE_REFRESH_TOKEN = "AGK0DWlowo4txHeXTHZMt6dv4XGA~001~S7s8CjQ8_kQ7ZGnKmnRmljj2k
 
 
 class TestNoTokenInErrorMessages:
-    """All seven error codes must be constructible with default messages that
-    never contain a token value — a static regression guard."""
+    """Every error code must be constructible with a default message that
+    never contains a token value — a static regression guard.
+
+    The `== set(ErrorCode)` assertion below is a completeness gate: adding a
+    new code without adding it here fails the suite, which is exactly what
+    happened when spec 002's codes landed. Extend the list; never relax the
+    assertion.
+    """
 
     def test_all_error_classes_default_messages_contain_no_token_shape(self):
         errors: list[YahooFantasyError] = [
@@ -41,6 +54,14 @@ class TestNoTokenInErrorMessages:
             UnsupportedDraftTypeError(),
             RateLimitedError(),
             UpstreamError(),
+            # spec 002 additions
+            SportNotSupportedError(),
+            WriteNotApprovedError(),
+            InvalidConfirmationError(),
+            ProposalExpiredError(),
+            ProposalAlreadyUsedError(),
+            PreconditionsChangedError(),
+            TradeInitiationNotSupportedError(),
         ]
         assert {e.code for e in errors} == set(ErrorCode)
         for err in errors:

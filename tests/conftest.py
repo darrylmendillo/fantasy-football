@@ -80,3 +80,77 @@ class FixtureDataSource:
 @pytest.fixture
 def fixture_source() -> FixtureDataSource:
     return FixtureDataSource()
+
+
+# ---------------------------------------------------------------------------
+# spec 002 (hosted multi-tenant) fixtures — T004
+#
+# Offline by construction: no network, no live credentials, no real clock.
+# Constitution v0.3.0 calls this the *mock-validated* tier: these prove our
+# logic is self-consistent, NOT that Yahoo's contract was understood.
+# ---------------------------------------------------------------------------
+
+# Two distinct identities, for proving tenant isolation (FR-005). Any test
+# that passes with only one of these is not testing isolation.
+SUB_A = "yahoo-guid-aaaa1111"
+SUB_B = "yahoo-guid-bbbb2222"
+
+
+class FakeClock:
+    """Controllable time source, so TTL/expiry logic is deterministic rather
+    than sleep-dependent."""
+
+    def __init__(self, now: int = 1_700_000_000) -> None:
+        self._now = now
+
+    def now(self) -> int:
+        return self._now
+
+    def advance(self, seconds: int) -> None:
+        self._now += seconds
+
+
+@pytest.fixture
+def clock() -> FakeClock:
+    return FakeClock()
+
+
+@pytest.fixture
+def store():
+    """In-memory application store, fresh per test."""
+    from yahoo_fantasy_mcp.store import Store
+
+    s = Store(":memory:")
+    yield s
+    s.close()
+
+
+# Exposed as fixtures rather than importable constants: yahoo_oauth ships a
+# top-level `tests` package into site-packages, so `from tests.conftest import
+# ...` resolves to ITS module, not ours. Fixtures sidestep the collision.
+@pytest.fixture
+def sub_a() -> str:
+    return SUB_A
+
+
+@pytest.fixture
+def sub_b() -> str:
+    return SUB_B
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    """Run @pytest.mark.anyio tests on asyncio only."""
+    return "asyncio"
+
+
+@pytest.fixture
+def fixture_client():
+    """Factory: fixture_client(draft_fixture="draft_midraft.json") -> YahooClient."""
+
+    def _make(draft_fixture: str = "draft_midraft.json") -> Any:
+        from yahoo_fantasy_mcp.client import YahooClient
+
+        return YahooClient(FixtureDataSource(draft_fixture=draft_fixture))
+
+    return _make

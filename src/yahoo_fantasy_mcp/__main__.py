@@ -1,49 +1,29 @@
-"""Stdio entrypoint (research R7): `python -m yahoo_fantasy_mcp` or the
-`yahoo-fantasy-mcp` console script.
+"""HTTP entrypoint for the hosted multi-tenant server (spec 002, T019).
 
-No network listener, no exposed port — FastMCP's stdio transport means the
-host process (e.g. Claude Code) launches this as a subprocess and speaks
-JSON-RPC over stdin/stdout. Credentials never leave the machine.
+Unlike spec 001's stdio entrypoint, this builds NO per-user state at start-up.
+There is no `build_context()` singleton: every user's Yahoo token arrives with
+their request and every league is resolved per call. Anything cached here
+would be shared across tenants.
 """
 
 from __future__ import annotations
 
-from yahoo_fantasy_mcp.client import YahooClient, YahooFantasyApiDataSource
+from yahoo_fantasy_mcp.auth_proxy import build_auth_proxy
 from yahoo_fantasy_mcp.config import load_config
 from yahoo_fantasy_mcp.logging_utils import get_logger
-from yahoo_fantasy_mcp.server import ServerContext, mcp, register_tools
+from yahoo_fantasy_mcp.server import build_server
+from yahoo_fantasy_mcp.store import Store
 
 logger = get_logger(__name__)
 
 
-def build_context() -> ServerContext:
-    from yahoo_fantasy_api import Game
-
-    from yahoo_fantasy_mcp import auth
-
-    config = load_config()
-    token_provider = auth.login(config.client_id, config.client_secret, config.token_path)
-    game = Game(token_provider, "nfl")
-    league = game.to_league(config.league_key)
-    my_team_key = league.team_key()
-    data_source = YahooFantasyApiDataSource(league, my_team_key)
-    client = YahooClient(data_source)
-
-    num_teams = client.get_league_info().num_teams
-    total_expected_picks = num_teams * config.roster_size
-
-    return ServerContext(
-        client=client,
-        token_provider=token_provider,
-        total_expected_picks=total_expected_picks,
-    )
-
-
 def main() -> None:
-    logger.info("starting yahoo-fantasy-mcp (stdio)")
-    ctx = build_context()
-    register_tools(mcp, ctx)
-    mcp.run()
+    config = load_config()
+    store = Store(config.db_path)
+    mcp_server = build_server(store, config)
+    mcp_server.auth = build_auth_proxy(config)
+    logger.info("starting yahoo-fantasy-mcp (http) on port %s", config.port)
+    mcp_server.run(transport="http", host="0.0.0.0", port=config.port)
 
 
 if __name__ == "__main__":

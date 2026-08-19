@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    # Runs on the operator's own Oracle box (registered as a self-hosted
+    # runner), not GitHub-hosted minutes. The "oracle" label pins jobs to
+    # that specific runner rather than any future self-hosted runner.
+    runs-on: [self-hosted, oracle]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      - name: Ruff
+        run: uv run ruff check src/ tests/
+
+      - name: Pytest
+        run: uv run pytest tests/ -q
+
+  mcp-protocol-verify:
+    # Protocol-level check against the real MCP inspector CLI, using dummy
+    # Yahoo credentials — no live Yahoo account needed or used. See
+    # specs/002-hosted-multitenant-mcp/quickstart.md, "MCP Inspector
+    # verification (mock-validated)", for what this does and doesn't prove.
+    runs-on: [self-hosted, oracle]
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Verify MCP protocol surface
+        run: bash scripts/verify-mcp-protocol.sh

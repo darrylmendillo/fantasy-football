@@ -19,3 +19,6 @@ oauth2.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Subagent-driven-development scratch workspace (ledger, briefs, reports)
+.superpowers/

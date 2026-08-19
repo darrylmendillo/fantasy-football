@@ -134,11 +134,24 @@ module-level `ServerContext` singleton, which is the multi-tenancy bug.
 
 ## Caching under multi-tenancy
 
-Phase 1 caches player identity and the player universe **per process** with no
-TTL, which was safe for one user and is a correctness and privacy bug for many.
+> **Corrected 2026-08-17.** This section previously claimed Phase 1's caches
+> were per-process and therefore a live cross-tenant leak. That was wrong.
+> `YahooFantasyApiDataSource` initialises its caches in `__init__`
+> (`client.py:175,178`), so they are **per-instance**; with a fresh data source
+> built per request, users are already isolated. The error was caught by
+> writing the test that was supposed to prove the bug (T008) and watching it
+> pass against unmodified code.
 
-**Rule**: every cache key MUST be scoped by `(league_key, …)` at minimum, and
-any cache holding user-specific state MUST additionally be scoped by `sub`.
+**Actual state**: isolation today is a consequence of *constructing a new data
+source per request*, not of the cache keys. That is correct but not free — it
+re-seeds the player universe on every request, which is precisely the
+rate-limit exposure spec 001 research R5 warns about.
+
+**Rule**: per-request construction is the current, deliberate design. If a data
+source is ever pooled, memoised, or module-scoped for performance, every cache
+key MUST at that point be scoped by `(league_key, …)`, and any cache holding
+user-specific state MUST additionally be scoped by `sub`. `tests/unit/test_client_cache_isolation.py`
+is the regression guard that fails if that is forgotten.
 
 | Cache | New key | Rationale |
 |---|---|---|

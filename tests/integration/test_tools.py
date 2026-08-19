@@ -8,7 +8,7 @@ here; FastMCP's own JSON-RPC framing is the library's concern, not ours.
 from __future__ import annotations
 
 from yahoo_fantasy_mcp.client import YahooClient
-from yahoo_fantasy_mcp.server import (
+from yahoo_fantasy_mcp.tools_read import (
     tool_get_available_players,
     tool_get_draft_results,
     tool_get_league_info,
@@ -100,7 +100,7 @@ class TestGetAvailablePlayers:
     def test_shape(self, fixture_source):
         fixture_source.draft_fixture = "draft_midraft.json"
         client = YahooClient(fixture_source)
-        result = tool_get_available_players(client, TOTAL_EXPECTED_PICKS, position=None, limit=50)
+        result = tool_get_available_players(client, TOTAL_EXPECTED_PICKS, positions=None)
         assert result["retrieved_at"]
         assert result["count"] == len(result["players"])
         assert all("average_pick" in p for p in result["players"])
@@ -109,7 +109,7 @@ class TestGetAvailablePlayers:
         fixture_source.draft_fixture = "draft_midraft.json"
         client = YahooClient(fixture_source)
         result = tool_get_available_players(
-            client, TOTAL_EXPECTED_PICKS, position="RB", limit=50
+            client, TOTAL_EXPECTED_PICKS, positions=["RB"]
         )
         assert all("RB" in p["positions"] for p in result["players"])
 
@@ -121,7 +121,7 @@ class TestGetAvailablePlayers:
 
         draft_result = tool_get_draft_results(client, TOTAL_EXPECTED_PICKS)
         available_result = tool_get_available_players(
-            client, TOTAL_EXPECTED_PICKS, position=None, limit=50
+            client, TOTAL_EXPECTED_PICKS, positions=None
         )
 
         drafted_ids = {p["player_id"] for p in draft_result["picks"]}
