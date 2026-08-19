@@ -29,12 +29,13 @@ Everything below is a protocol/wiring check, not a functional one; G1/G2/G3
 (above) remain the gates for anything claiming to actually work against
 Yahoo.
 
-`@modelcontextprotocol/inspector` opens an interactive browser UI, which
-isn't drivable in this (headless, non-interactive) environment. Substituted
-with direct HTTP/Python verification against the real running server —
-arguably stronger evidence than an eyeballed UI session, since every claim
-below is either a raw protocol response or a live call into the actual
-`build_server()` product code, not a manual glance.
+`@modelcontextprotocol/inspector`'s default `--web` mode opens an interactive
+browser UI, which isn't drivable in this (headless, non-interactive)
+environment. The first pass below substituted direct HTTP/Python
+verification against the real running server for that. A later pass (see
+"Genuine MCP Inspector CLI run" further down) used the package's actual
+`--cli` mode instead — the real Anthropic tool, not a substitute — once it
+was confirmed that mode exists and runs non-interactively.
 
 **Server started** exactly per this doc's Step 1 command
 (`YAHOO_CLIENT_ID=dummy YAHOO_CLIENT_SECRET=dummy PUBLIC_BASE_URL=http://localhost:8000
@@ -80,6 +81,48 @@ remains unverified, because it requires an actual Yahoo account and
 approved API access (gates G1–G3, tasks.md), is whether the *content* of
 what these tools return is correct against live data — that's what V1–V9
 above are for, once the gates clear.
+
+### Genuine MCP Inspector CLI run (2026-08-19)
+
+Ran the real `@modelcontextprotocol/inspector` package (v2.2.0, fetched live
+via `npx -y @modelcontextprotocol/inspector`) in its `--cli` mode — a
+non-interactive mode the package documents explicitly for CI use
+(`--stored-auth-only`: "Never start interactive OAuth... Preferred for
+CI/non-interactive runs"). This supersedes nothing above; it adds a second,
+independent confirmation from the actual Anthropic tool rather than a
+hand-rolled equivalent.
+
+Server started identically to the 2026-08-18 run (dummy Yahoo credentials,
+same command). Command run against it:
+
+```bash
+npx -y @modelcontextprotocol/inspector --cli \
+  --server-url http://localhost:8000/mcp --transport http \
+  --method tools/list --stored-auth-only --format json
+```
+
+**Output:**
+```json
+{"error":{"code":"auth_required","message":"Error POSTing to endpoint: "}}
+```
+Exit code 3.
+
+This is the real inspector tool independently reaching the same conclusion
+the curl-based check above did: `tools/list` cannot proceed without a valid
+OAuth token, and the tool refuses to silently continue or fake one. It does
+**not** go further than the curl-based check — `tools/list` still cannot
+actually be listed over the wire, because that requires a real Yahoo
+consent flow, which dummy credentials cannot complete (same gate G1–G3
+limitation noted throughout this document). Getting an authenticated
+`tools/list` via this same command is the natural first live check once
+gate G1 clears — swap `--stored-auth-only` for a real interactive login
+(drop that flag, add `--client-id`/`--client-secret` if using a static
+client) and rerun.
+
+Repeatable as `scripts/verify-mcp-protocol.sh` — starts the server with
+dummy credentials, re-runs every check above (OAuth metadata, unauthenticated
+401, and the real inspector `--cli` `auth_required` check), and tears the
+server down on exit.
 
 ## Prerequisites
 
