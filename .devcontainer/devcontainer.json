@@ -4,8 +4,8 @@
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {}
   },
-  "postCreateCommand": "pip install --user uv && ~/.local/bin/uv sync",
-  "postAttachCommand": "echo 'Codespace ready. Run: uv run python -m yahoo_fantasy_mcp'",
+  "postCreateCommand": "pip install --user uv && ~/.local/bin/uv sync --extra dev",
+  "postAttachCommand": "echo 'Codespace ready. Tests: uv run pytest tests/ -q  |  Lint: uv run ruff check src/ tests/  |  This container is for development/tests, not for hosting the live server (that needs a stable public HTTPS URL for Yahoo OAuth callbacks, and lives on a real host per specs/002-hosted-multitenant-mcp/quickstart.md).'",
   "remoteEnv": {
     "PATH": "${containerEnv:PATH}:${containerWorkspaceFolder}/.venv/bin:/root/.local/bin"
   },

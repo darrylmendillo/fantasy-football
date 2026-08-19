@@ -15,6 +15,13 @@ Neither is under our control; both block implementation, not planning.
 1. **Yahoo API Access Application approved** for the operator's Client ID at
    <https://sports.yahoo.com/developer/access/>. **Read+write (`fspt-w`)** is
    required for V5–V9; read-only (`fspt-r`) still permits V1–V4.
+   **Last checked 2026-08-19: still not approved** — called
+   `yahoo_fantasy_api.Game('nfl').league_ids()` directly against Yahoo with a
+   valid, freshly-refreshed token and got back
+   `oauth_problem="additional_authorization_required"`. Re-run that check
+   before assuming this gate has cleared; do not infer approval from the
+   Client ID/Secret being valid or the OAuth handshake succeeding — those are
+   independent of this gate.
 2. **Phase 1 validated end-to-end** (spec 001, T055) — required by constitution
    Principle I before this phase's implementation begins.
 

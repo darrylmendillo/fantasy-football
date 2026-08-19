@@ -16,6 +16,12 @@ venv/
 oauth2.json
 .yahoo_token.json
 
+# Runtime SQLite store (users, usage history, pending write proposals)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # OS
 .DS_Store
 Thumbs.db

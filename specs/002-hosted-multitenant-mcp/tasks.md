@@ -221,7 +221,7 @@ Implementation proceeds to **mock-validated** tier now. **Integration-validated*
 ## Phase 8: Polish, Deployment & Cross-Cutting Concerns
 
 - [ ] T063 [P] Full-suite secret scan test in `tests/unit/test_no_secret_leakage.py` — no credential appears in any tool output, log line, or error message across every tool (FR-026, SC-005)
-- [ ] T064 [P] Rewrite `README.md` for the hosted product: connect-by-URL instructions for Claude and ChatGPT, no per-user developer credentials, Yahoo attribution (FR-013), and no name implying Yahoo affiliation (FR-030)
+- [ ] T064 [P] **Partially done, correctly left unchecked.** `README.md` was rewritten for the hosted product (connect-by-URL instructions for Claude/ChatGPT, operator-only setup with no per-user developer credentials) — those pieces of this task are done. Two pieces are NOT: **FR-013** (formal Yahoo attribution wording — the README mentions "Yahoo Fantasy Football" as context, but nobody has researched what Yahoo's actual required attribution language/notice is, so this isn't verified compliance, just incidental mention) and **FR-030** (the package/repo/product name is still `yahoo-fantasy-mcp`, which leads with "Yahoo" — exactly what FR-030 prohibits; the product name was deliberately left open earlier and has not been decided). Do not check this box until both are resolved.
 - [ ] T065 [P] Add Yahoo Fantasy attribution to tool output/docs per Yahoo's branding requirements (FR-013)
 - [ ] T066 Provision TLS + public hostname on the Oracle server and document it in `docs/deploy.md` (FR-029)
 - [ ] T067 Add systemd unit and restart/backup runbook in `docs/deploy.md`; verify tokens survive restart and pending proposals fail closed rather than silently succeeding (quickstart operational checks)
